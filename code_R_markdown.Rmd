@@ -1,0 +1,4237 @@
+---
+title: "Survival in colon, rectal and small intestinal cancers in the nordic countries through a half century"
+subtitle: "Full R code"
+author: "Filip Tichanek, Asta Försti, Vaclav Liska, Akseli Hemminki, Kari Hemminki"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+  word_document: default
+  toc: yes
+  toc_depth: 5
+  number_sections: yes
+  theme: united
+  pdf_document: default
+urlcolor: blue
+---
+\large
+\tableofcontents 
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+\Large
+Please, **cite as** [original article](*TO BE ADDED*) published in [*TO BE ADDED*]
+
+Full citation:
+\large
+[*TO BE ADDED*]
+
+# Introduction
+\large
+This report shows source data, their wrangling, fitting statistical models, outputs of the models, and visualizations of both data and probabilistic models. 
+
+All analyses were done using [R sofware](https://www.r-project.org/) in [RStudio](https://www.rstudio.com/) interface.
+
+\newpage
+## Software and Packages
+\normalsize
+Software versions.
+\small
+```{r}
+rm(list=ls()) # removing all data and objects from R environment
+R.version
+rstudioapi::versionInfo()$version
+```
+\normalsize
+Uploading R packages and their version
+\small
+```{r,errors=FALSE}
+library(stringr);packageVersion('stringr')
+library(brms);packageVersion('brms')
+packageVersion('Rstan') # uploaded automatically with brms
+library(dplyr);packageVersion('dplyr')
+library(cowplot);packageVersion('cowplot')
+```
+
+
+
+\normalsize
+# Incidence and mortality
+\small
+```{r}
+## setting parameters for smoothing
+spar=0.4
+knot=15
+
+## Defining colors 
+
+cola<-c(
+  rgb(1,0.1,0.1,alpha=1),
+  rgb(0.1,0.1,1,alpha=1),
+  rgb(0, 0.6, 0.3,alpha=1),
+  rgb(0.7,0.7,0.1,alpha=1))
+
+colb<-c(
+  rgb(1,0.1,0.1,alpha=0.2),
+  rgb(0.1,0.1,1,alpha=0.2),
+  rgb(0, 0.6, 0.3,alpha=0.2),
+  rgb(0.7,0.7,0.1,alpha=0.2))
+
+colc<-c(
+  rgb(1,0.1,0.1,alpha=0.8),
+  rgb(0.1,0.1,1,alpha=0.8),
+  rgb(0, 0.6, 0.3,alpha=0.8),
+  rgb(0.7,0.7,0.1,alpha=0.8))
+
+```
+
+## Data upload and wrangling
+
+### Colon cancer data
+\normalsize
+Data were downloaded from [Nordcan](https://nordcan.iarc.fr/en/dataviz/trends?sexes=1_2&cancers=90&populations=208_246_752_578&mode=population&multiple_populations=1&multiple_cancers=0&survival=1&types=0_1)
+
+\small
+```{r}
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/colon_inc_mor.csv"
+colon_inc_mor<-read.csv(url(urlfile),sep=",")
+```
+\small
+```{r}
+colon_inc_mor
+```
+
+\normalsize
+Data wrangling
+\small
+```{r}
+colnam<-colon_inc_mor[,1]
+colon_inc_mor<-data.frame(t(colon_inc_mor))[-1,]
+colnames(colon_inc_mor) <- colnam
+colon_inc_mor$year <- 1943:2020
+
+### Subseting years 1961-2020
+colon_inc_mor<-colon_inc_mor[colon_inc_mor$year>1960,]
+
+### Removing space character and converting characters to numbers
+x=1;repeat{
+colon_inc_mor[,x]<-str_trim(colon_inc_mor[,x])
+colon_inc_mor[,x]<-as.numeric(colon_inc_mor[,x])
+x=x+1;if(x>17){break}}
+summary(colon_inc_mor) 
+```
+
+### Rectal cancer data
+\normalsize
+Data were downloaded from [Nordcan](https://nordcan.iarc.fr/en/dataviz/trends?sexes=1_2&cancers=100&populations=208_246_752_578&mode=population&multiple_populations=1&multiple_cancers=0&survival=1&types=0_1)
+
+\small
+```{r}
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/rectum_inc_mor.csv"
+rectum_inc_mor<-read.csv(url(urlfile),sep=",")
+```
+\normalsize
+\small
+```{r}
+rectum_inc_mor
+```
+
+\normalsize
+Data wrangling
+\small
+```{r}
+colnam<-rectum_inc_mor[,1]
+rectum_inc_mor<-data.frame(t(rectum_inc_mor))[-1,]
+colnames(rectum_inc_mor) <- colnam
+rectum_inc_mor$year <- 1943:2020
+
+### Sub-setting years 1961-2020
+rectum_inc_mor<-rectum_inc_mor[rectum_inc_mor$year>1960,]
+
+### Removing space character and converting characters to numbers
+x=1;repeat{
+rectum_inc_mor[,x]<-str_trim(rectum_inc_mor[,x])
+rectum_inc_mor[,x]<-as.numeric(rectum_inc_mor[,x])
+x=x+1;if(x>17){break}}
+summary(rectum_inc_mor)
+```
+
+
+### Small intestine data
+\normalsize
+Data were downloaded from [Nordcan](https://nordcan.iarc.fr/en/dataviz/trends?sexes=1_2&cancers=80&populations=208_246_752_578&mode=population&multiple_populations=1&multiple_cancers=0&survival=1&types=0_1)
+
+\small
+```{r}
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/small_intestine_inc_mor.csv"
+small_intestine_inc_mor<-read.csv(url(urlfile),sep=",")
+```
+\small
+```{r}
+small_intestine_inc_mor
+```
+
+\normalsize
+Data wrangling
+\small
+```{r}
+colnam<-small_intestine_inc_mor[,1]
+small_intestine_inc_mor<-data.frame(t(small_intestine_inc_mor))[-1,]
+colnames(small_intestine_inc_mor) <- colnam
+small_intestine_inc_mor$year <- 1943:2020
+
+### Subseting years 1961-2020
+small_intestine_inc_mor<-small_intestine_inc_mor[small_intestine_inc_mor$year>1960,]
+
+### Removing space character and converting characters to numbers
+x=1;repeat{
+small_intestine_inc_mor[,x]<-str_trim(small_intestine_inc_mor[,x])
+small_intestine_inc_mor[,x]<-as.numeric(small_intestine_inc_mor[,x])
+x=x+1;if(x>17){break}}
+summary(small_intestine_inc_mor)
+```
+
+## Suppl. Figure 1 - Incidence
+\small
+```{r, fig.height=4,fig.width=8}
+### General setting and titles of plots
+m <- matrix(c(1,2,3
+             ,4,5,6), nrow = 2, ncol =3 ,byrow = TRUE)
+layout(mat = m,heights = c(0.06,1-0.06))
+par(mgp=c(1.6,0.8,0))
+par(mar=c(0,0,0,0))
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Colon cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Rectal cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Small intestine cancer",cex=1.6,font=3,xpd=TRUE)
+
+## Plot of colon cancer incidence
+par(mgp=c(1.6,0.8,0))
+par(mar=c(2,2.5,0,0.7))
+
+range<-c(0,30);scal<-range[2]-range[1]
+xrange<-c(1961,2020)
+
+plot(NULL,xlim=xrange,ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(xrange[1],range[2],xrange[2],range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(xrange[1],xrange[2]),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<- round(xrange[1]+5,-1)
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+data=colon_inc_mor;xx<-1
+repeat{
+smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+lines(smoothingSpline,col=colc[xx],lty=1,lwd=2,lend=1)
+xx=xx+1;if(xx>4){break}}
+
+repeat{
+  smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+  lines(smoothingSpline,col=colc[xx-4],lty=4,lwd=2,lend=1)
+  xx=xx+1;if(xx>8){break}}
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),
+ labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=xrange[1])
+title(ylab="Incidence per 100,000 (ASR - World)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(round(xrange[1]+5,-1),2020,by=10)),pos=range[1])
+lines(c(xrange[1],xrange[2]),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1965,range[2]-0.05*scal,"a",cex=2.5)
+
+xx=1;yy=range[1]+scal*0.25
+rect(1979.7,yy+0.035*scal,2017.9,yy-0.21*scal,col="white",border="grey50",lwd=0.8)
+repeat{
+  lines(c(1997,2000.5),c(yy,yy),lwd=14,col=cola[xx],lend=1)
+  xx<-xx+1;yy=yy-(scal*0.058);if(xx>4){break}}
+
+text(1988,0.23*scal,"Males",cex=1.25)
+lines(c(1982,1994),c(0.185*scal,0.185*scal),lwd=2)
+
+text(1988,0.12*scal,"Females",cex=1.25)
+lines(c(1982,1994),c(0.075*scal,0.075*scal),lwd=2,lty=4)
+
+xx=1;yy=range[1]+scal*0.25
+text(2008.5,yy,"Denmark",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2008.5,yy,"Finland",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2008.5,yy,"Norway",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2008.5,yy,"Sweden",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+  
+## Plot of rectal cancer incidence
+  par(mgp=c(1.6,0.8,0))
+  par(mar=c(2,2.5,0,0.7))
+  
+  range<-c(0,20);scal<-range[2]-range[1]
+  xrange<-c(1961,2020)
+  
+  plot(NULL,xlim=xrange,ylim=c(range[1],range[2]),xlab="",ylab=""
+       ,las=1, axes=FALSE)
+  rect(xrange[1],range[2],xrange[2],range[1],col="grey90",border=NA)
+  x<-range[1]
+  repeat{
+    lines(c(xrange[1],xrange[2]),c(x,x),col="white")
+    x=x+1;if(x>range[2]){break}}
+  
+  x<- round(xrange[1]+5,-1)
+  repeat{
+    lines(c(x,x),c(range[1],range[2]),col="white")
+    x=x+10;if(x>2020){break}}
+  
+  data=rectum_inc_mor;xx<-1
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx],lty=1,lwd=2,lend=1)
+    xx=xx+1;if(xx>4){break}}
+  
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-4],lty=4,lwd=2,lend=1)
+    xx=xx+1;if(xx>8){break}}
+  
+  axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),
+      labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=xrange[1])
+  title(ylab="Incidence per 100,000 (ASR - World)", line=1, cex.lab=1.4)
+  axis(side=1,las=1,cex.axis=1.4,at=c(seq(round(xrange[1]+5,-1),2020,by=10)),pos=range[1])
+  lines(c(xrange[1],xrange[2]),c(range[1],range[1]))
+  title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+  text(1965,range[2]-0.05*scal,"b",cex=2.5)
+  
+## Plot of small_intestine cancer incidence
+  par(mgp=c(1.6,0.8,0))
+  par(mar=c(2,2.5,0,0.7))
+  
+  range<-c(0,3);scal<-range[2]-range[1]
+  xrange<-c(1961,2020)
+  
+  plot(NULL,xlim=xrange,ylim=c(range[1],range[2]),xlab="",ylab=""
+       ,las=1, axes=FALSE)
+  rect(xrange[1],range[2],xrange[2],range[1],col="grey90",border=NA)
+  x<-range[1]
+  repeat{
+    lines(c(xrange[1],xrange[2]),c(x,x),col="white")
+    x=x+1;if(x>range[2]){break}}
+  
+  x<- round(xrange[1]+5,-1)
+  repeat{
+    lines(c(x,x),c(range[1],range[2]),col="white")
+    x=x+10;if(x>2020){break}}
+  
+  data=small_intestine_inc_mor;xx<-1
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx],lty=1,lwd=2,lend=1)
+    xx=xx+1;if(xx>4){break}}
+  
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-4],lty=4,lwd=2,lend=1)
+    xx=xx+1;if(xx>8){break}}
+
+
+  axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),
+       labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=xrange[1])
+  title(ylab="Incidence per 100,000 (ASR - World)", line=1, cex.lab=1.4)
+  axis(side=1,las=1,cex.axis=1.4,at=c(seq(round(xrange[1]+5,-1),2020,by=10)),pos=range[1])
+  lines(c(xrange[1],xrange[2]),c(range[1],range[1]))
+  title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+  text(1965,range[2]-0.05*scal,"c",cex=2.5)
+```
+
+## Suppl. Figure 2 - Mortality
+\small
+```{r, fig.height=4,fig.width=8}
+## General setting and titles of plots ------------
+  m <- matrix(c(1,2,3
+                ,4,5,6), nrow = 2, ncol =3 ,byrow = TRUE)
+  layout(mat = m,heights = c(0.06,1-0.06))
+  par(mgp=c(1.6,0.8,0))
+  par(mar=c(0,0,0,0))
+  
+  plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+  text(0,-0.2,"Colon cancer",cex=1.6,font=3,xpd=TRUE)
+  
+  plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+  text(0,-0.2,"Rectal cancer",cex=1.6,font=3,xpd=TRUE)
+  
+  plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+  text(0,-0.2,"Small intestine cancer",cex=1.6,font=3,xpd=TRUE)
+  
+## Plot of colon cancer mortality --------
+  par(mgp=c(1.6,0.8,0))
+  par(mar=c(2,2.5,0,0.7))
+  
+  range<-c(0,16);scal<-range[2]-range[1]
+  xrange<-c(1961,2020)
+  
+  plot(NULL,xlim=xrange,ylim=c(range[1],range[2]),xlab="",ylab=""
+       ,las=1, axes=FALSE)
+  rect(xrange[1],range[2],xrange[2],range[1],col="grey90",border=NA)
+  x<-range[1]
+  repeat{
+    lines(c(xrange[1],xrange[2]),c(x,x),col="white")
+    x=x+1;if(x>range[2]){break}}
+  
+  x<- round(xrange[1]+5,-1)
+  repeat{
+    lines(c(x,x),c(range[1],range[2]),col="white")
+    x=x+10;if(x>2020){break}}
+  
+  data=colon_inc_mor;xx<-9
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-8],lty=1,lwd=2,lend=1)
+    xx=xx+1;if(xx>12){break}}
+  
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-12],lty=4,lwd=2,lend=1)
+    xx=xx+1;if(xx>16){break}}
+  
+  axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),
+       labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=xrange[1])
+  title(ylab="Mortality per 100,000 (ASR - World)", line=1, cex.lab=1.4)
+  axis(side=1,las=1,cex.axis=1.4,at=c(seq(round(xrange[1]+5,-1),2020,by=10)),pos=range[1])
+  lines(c(xrange[1],xrange[2]),c(range[1],range[1]))
+  title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+  text(1965,range[2]-0.05*scal,"a",cex=2.5)
+  
+  
+## Plot of rectal cancer mortality
+  par(mgp=c(1.6,0.8,0))
+  par(mar=c(2,2.5,0,0.7))
+  
+  range<-c(0,16);scal<-range[2]-range[1]
+  xrange<-c(1961,2020)
+  
+  plot(NULL,xlim=xrange,ylim=c(range[1],range[2]),xlab="",ylab=""
+       ,las=1, axes=FALSE)
+  rect(xrange[1],range[2],xrange[2],range[1],col="grey90",border=NA)
+  x<-range[1]
+  repeat{
+    lines(c(xrange[1],xrange[2]),c(x,x),col="white")
+    x=x+1;if(x>range[2]){break}}
+  
+  x<- round(xrange[1]+5,-1)
+  repeat{
+    lines(c(x,x),c(range[1],range[2]),col="white")
+    x=x+10;if(x>2020){break}}
+  
+  data=rectum_inc_mor;xx<-9
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-8],lty=1,lwd=2,lend=1)
+    xx=xx+1;if(xx>12){break}}
+  
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-12],lty=4,lwd=2,lend=1)
+    xx=xx+1;if(xx>16){break}}
+  
+  axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),
+    labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=xrange[1])
+  title(ylab="Mortality per 100,000 (ASR - World)", line=1, cex.lab=1.4)
+  axis(side=1,las=1,cex.axis=1.4,at=c(seq(round(xrange[1]+5,-1),2020,by=10)),pos=range[1])
+  lines(c(xrange[1],xrange[2]),c(range[1],range[1]))
+  title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+  text(1965,range[2]-0.05*scal,"b",cex=2.5)
+  
+  xx=1;
+  yr=range[1]+scal*0.95
+  yy=yr
+  rect(1979.7,yy+0.035*scal,2017.9,yy-0.21*scal,col="white",border="grey50",lwd=0.8)
+  repeat{
+    lines(c(1997,2000.5),c(yy,yy),lwd=14,col=cola[xx],lend=1)
+    xx<-xx+1;yy=yy-(scal*0.058);if(xx>4){break}}
+  
+  
+  text(1988,0.93*scal,"Males",cex=1.25)
+  lines(c(1982,1994),c(0.885*scal,0.885*scal),lwd=2)
+  
+  text(1988,0.82*scal,"Females",cex=1.25)
+  lines(c(1982,1994),c(0.775*scal,0.775*scal),lwd=2,lty=4)
+  
+  xx=1;yy=range[1]+scal*0.95
+  text(2008.5,yy,"Denmark",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+  text(2008.5,yy,"Finland",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+  text(2008.5,yy,"Norway",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+  text(2008.5,yy,"Sweden",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+  
+## Plot of small_intestine cancer mortality 
+  par(mgp=c(1.6,0.8,0))
+  par(mar=c(2,2.5,0,0.7))
+  
+  range<-c(0,1);scal<-range[2]-range[1]
+  xrange<-c(1961,2020)
+  
+  plot(NULL,xlim=xrange,ylim=c(range[1],range[2]),xlab="",ylab=""
+       ,las=1, axes=FALSE)
+  rect(xrange[1],range[2],xrange[2],range[1],col="grey90",border=NA)
+  x<-range[1]
+  repeat{
+    lines(c(xrange[1],xrange[2]),c(x,x),col="white")
+    x=x+1;if(x>range[2]){break}}
+  
+  x<- round(xrange[1]+5,-1)
+  repeat{
+    lines(c(x,x),c(range[1],range[2]),col="white")
+    x=x+10;if(x>2020){break}}
+  
+  data=small_intestine_inc_mor;xx<-9
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-8],lty=1,lwd=2,lend=1)
+    xx=xx+1;if(xx>12){break}}
+  
+  repeat{
+    smoothingSpline = smooth.spline(data$year, data[,xx], spar=spar, nknots=knot)
+    lines(smoothingSpline,col=colc[xx-12],lty=4,lwd=2,lend=1)
+    xx=xx+1;if(xx>16){break}}
+  
+  axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],                          rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=xrange[1])
+  title(ylab="Mortality per 100,000 (ASR - World)", line=1, cex.lab=1.4)
+  axis(side=1,las=1,cex.axis=1.4,at=c(seq(round(xrange[1]+5,-1),2020,by=10)),pos=range[1])
+  lines(c(xrange[1],xrange[2]),c(range[1],range[1]))
+  title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+  text(1965,range[2]-0.05*scal,"c",cex=2.5)
+  
+```
+
+# Non-linear trends in survival
+
+
+## Defining priors
+\small
+```{r,errors=FALSE}
+prior_group <- c(
+  set_prior("normal(0,20)", class = "b", coef = "groupFinland.Males"),
+  set_prior("normal(0,20)", class = "b", coef = "groupNorway.Males"),
+  set_prior("normal(0,20)", class = "b", coef = "groupSweden.Males"),
+  set_prior("normal(0,20)", class = "b", coef = "groupDenmark.Males"),
+  set_prior("normal(0,20)", class = "b", coef = "groupNorway.Females"),
+  set_prior("normal(0,20)", class = "b", coef = "groupSweden.Females"))
+```
+
+## Source data
+\normalsize
+Data were downloaded from [Nordcan](https://nordcan.iarc.fr/en) in October 2022.
+
+Here are links to 1-year survival in: [colon](https://nordcan.iarc.fr/en/dataviz/survival?populations=208_578_246_752&multiple_populations=1&multiple_cancers=0&survival=1&cancers=90&sexes=1_2&mode=population), [rectal](https://nordcan.iarc.fr/en/dataviz/survival?populations=208_578_246_752&multiple_populations=1&multiple_cancers=0&survival=1&cancers=100&sexes=1_2&mode=population), [small intestine](https://nordcan.iarc.fr/en/dataviz/survival?populations=208_578_246_752&multiple_populations=1&multiple_cancers=0&survival=1&cancers=80&sexes=1_2&mode=population) cancers
+
+Here are links to 5-years survival in: [colon](https://nordcan.iarc.fr/en/dataviz/survival?populations=208_578_246_752&multiple_populations=1&multiple_cancers=0&survival=5&cancers=90&sexes=1_2&mode=population), [rectal](https://nordcan.iarc.fr/en/dataviz/survival?populations=208_578_246_752&multiple_populations=1&multiple_cancers=0&survival=5&cancers=100&sexes=1_2&mode=population), [small intestine](https://nordcan.iarc.fr/en/dataviz/survival?populations=208_578_246_752&multiple_populations=1&multiple_cancers=0&survival=5&cancers=80&sexes=1_2&mode=population) cancers
+
+\small
+```{r}
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/colon_1y.csv"
+colon_1y<-read.csv(url(urlfile),sep=";")
+
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/colon_5y.csv"
+colon_5y<-read.csv(url(urlfile),sep=";")
+
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/rectum_1y.csv"
+rectum_1y<-read.csv(url(urlfile),sep=";")
+
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/rectum_5y.csv"
+rectum_5y<-read.csv(url(urlfile),sep=";")
+
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/small_intestine_1y.csv"
+small_intestine_1y<-read.csv(url(urlfile),sep=";")
+
+urlfile="https://raw.githubusercontent.com/filip-tichanek/nord_intestine/main/small_intestine_5y.csv"
+small_intestine_5y<-read.csv(url(urlfile),sep=";")
+```
+\normalsize
+In the tables below, there are data seen also in **Supplementary Table 3**. Columns ending with '.1' indicate data for females (right columns) whereas others are for males (left columns)
+\small
+```{r}
+colon_1y
+colon_5y
+rectum_1y
+rectum_5y
+small_intestine_1y
+small_intestine_5y
+```
+
+## Data wrangling
+### Colon cancer
+\small
+```{r}
+x<-2;colon_1y_est<-data.frame(colon_1y[,1])
+repeat{colon_1y_est[,x]<-str_sub(colon_1y[,x],1,4);x<-x+1
+if(x>9){break}}
+repeat{colon_1y_est[,x]<-str_sub(colon_1y[,x-8],6,9);x<-x+1;if(x>17){break}}
+x<-2;colon_5y_est<-data.frame(colon_5y[,1])
+repeat{colon_5y_est[,x]<-str_sub(colon_5y[,x],1,4);x<-x+1
+if(x>9){break}}
+repeat{colon_5y_est[,x]<-str_sub(colon_5y[,x-8],6,9);x<-x+1;if(x>17){break}}
+
+colon<-(data.frame(unlist(colon_1y_est[,2:9])));colnames(colon)<-"surv_1y"
+colon$cil_1y<-as.numeric(unlist(colon_1y_est[,10:17]))
+colon$surv_5y<-as.numeric(unlist(colon_5y_est[,2:9]))
+colon$cil_5y<-as.numeric(unlist(colon_5y_est[,10:17]))
+colon$year<-rep(seq(1973,2018,by=5),8)
+colon$sex<-c(rep("Males",40),rep("Females",40))
+colon$country<-c(rep(c(rep("Denmark",10),rep("Finland",10),rep("Norway",10),rep("Sweden",10)),2))
+colon$group<-interaction(colon$country,colon$sex)
+colon$years10cen<-(colon$year-1995.5)/10 # centered time in tens of years
+colon$surv_1y<-as.numeric(colon$surv_1y)
+colon$surv_5y<-as.numeric(colon$surv_5y)
+colon$cil_1y<-as.numeric(colon$cil_1y)
+colon$cil_5y<-as.numeric(colon$cil_5y)
+colon$se_1y<-(colon$surv_1y-colon$cil_1y)/1.96
+colon$se_5y<-(colon$surv_5y-colon$cil_5y)/1.96
+colon$surv_cond<-(colon$surv_5y/colon$surv_1y)*100
+colon
+```
+
+### Rectal cancer
+\small
+```{r}
+x<-2;rectum_1y_est<-data.frame(rectum_1y[,1])
+repeat{rectum_1y_est[,x]<-str_sub(rectum_1y[,x],1,4);x<-x+1
+if(x>9){break}}
+repeat{rectum_1y_est[,x]<-str_sub(rectum_1y[,x-8],6,9);x<-x+1;if(x>17){break}}
+x<-2;rectum_5y_est<-data.frame(rectum_5y[,1])
+repeat{rectum_5y_est[,x]<-str_sub(rectum_5y[,x],1,4);x<-x+1
+if(x>9){break}}
+repeat{rectum_5y_est[,x]<-str_sub(rectum_5y[,x-8],6,9);x<-x+1;if(x>17){break}}
+
+rectum<-(data.frame(unlist(rectum_1y_est[,2:9])));colnames(rectum)<-"surv_1y"
+rectum$cil_1y<-as.numeric(unlist(rectum_1y_est[,10:17]))
+rectum$surv_5y<-as.numeric(unlist(rectum_5y_est[,2:9]))
+rectum$cil_5y<-as.numeric(unlist(rectum_5y_est[,10:17]))
+rectum$year<-rep(seq(1973,2018,by=5),8)
+rectum$sex<-c(rep("Males",40),rep("Females",40))
+rectum$country<-c(rep(c(rep("Denmark",10),rep("Finland",10),rep("Norway",10),rep("Sweden",10)),2))
+rectum$group<-interaction(rectum$country,rectum$sex)
+rectum$years10cen<-(rectum$year-1995.5)/10 # centered time in tens of years
+rectum$surv_1y<-as.numeric(rectum$surv_1y)
+rectum$surv_5y<-as.numeric(rectum$surv_5y)
+rectum$cil_1y<-as.numeric(rectum$cil_1y)
+rectum$cil_5y<-as.numeric(rectum$cil_5y)
+rectum$se_1y<-(rectum$surv_1y-rectum$cil_1y)/1.96
+rectum$se_5y<-(rectum$surv_5y-rectum$cil_5y)/1.96
+rectum$surv_cond<-(rectum$surv_5y/rectum$surv_1y)*100
+rectum
+```
+
+
+### Small intestine cancer
+\small
+```{r}
+x<-2;small_intestine_1y_est<-data.frame(small_intestine_1y[,1])
+repeat{small_intestine_1y_est[,x]<-str_sub(small_intestine_1y[,x],1,4);x<-x+1
+if(x>9){break}}
+repeat{small_intestine_1y_est[,x]<-str_sub(small_intestine_1y[,x-8],6,9);x<-x+1;if(x>17){break}}
+x<-2;small_intestine_5y_est<-data.frame(small_intestine_5y[,1])
+repeat{small_intestine_5y_est[,x]<-str_sub(small_intestine_5y[,x],1,4);x<-x+1
+if(x>9){break}}
+repeat{small_intestine_5y_est[,x]<-str_sub(small_intestine_5y[,x-8],6,9);x<-x+1;if(x>17){break}}
+
+small_intestine<-(data.frame(unlist(small_intestine_1y_est[,2:9])));colnames(small_intestine)<-"surv_1y"
+small_intestine$cil_1y<-as.numeric(unlist(small_intestine_1y_est[,10:17]))
+small_intestine$surv_5y<-as.numeric(unlist(small_intestine_5y_est[,2:9]))
+small_intestine$cil_5y<-as.numeric(unlist(small_intestine_5y_est[,10:17]))
+small_intestine$year<-rep(seq(1973,2018,by=5),8)
+small_intestine$sex<-c(rep("Males",40),rep("Females",40))
+small_intestine$country<-c(rep(c(rep("Denmark",10),rep("Finland",10),rep("Norway",10),rep("Sweden",10)),2))
+small_intestine$group<-interaction(small_intestine$country,small_intestine$sex)
+small_intestine$years10cen<-(small_intestine$year-1995.5)/10 # centered time in tens of years
+small_intestine$surv_1y<-as.numeric(small_intestine$surv_1y)
+small_intestine$surv_5y<-as.numeric(small_intestine$surv_5y)
+small_intestine$cil_1y<-as.numeric(small_intestine$cil_1y)
+small_intestine$cil_5y<-as.numeric(small_intestine$cil_5y)
+small_intestine$se_1y<-(small_intestine$surv_1y-small_intestine$cil_1y)/1.96
+small_intestine$se_5y<-(small_intestine$surv_5y-small_intestine$cil_5y)/1.96
+small_intestine$surv_cond<-(small_intestine$surv_5y/small_intestine$surv_1y)*100
+small_intestine
+```
+
+## Models
+
+### Defining colon models
+
+\small
+```{r, results = 'hide',cache=TRUE}
+set.seed(17)
+colon_1y_model<-brm(surv_1y|se(se_1y)~group+s(years10cen,by=group,k=5)
+    ,family="Gaussian",save_pars = save_pars(all = TRUE),prior=prior_group,seed=17
+    ,data=colon,iter=7000, warmup=2000,chains=2,cores=1,control = list(adapt_delta = 0.98))
+conditional_effects(colon_1y_model,effects='years10cen:group')
+
+colon_5y_model<-brm(surv_5y|se(se_5y)~group+s(years10cen,by=group,k=5)
+    ,family="Gaussian",save_pars = save_pars(all = TRUE),prior=prior_group,seed=17
+    ,data=colon,iter=7000, warmup=2000,chains=2,cores=1,control = list(adapt_delta = 0.98))
+conditional_effects(colon_5y_model,effects='years10cen:group')
+```
+
+### Defining rectal models
+```{r, results = 'hide',cache=TRUE}
+set.seed(17)
+rectum_1y_model<-brm(surv_1y|se(se_1y)~group+s(years10cen,by=group,k=5)
+      ,family="Gaussian",save_pars = save_pars(all = TRUE),prior=prior_group,seed=17
+      ,data=rectum,iter=7000, warmup=2000,chains=2,cores=1,control = list(adapt_delta = 0.98))
+conditional_effects(rectum_1y_model,effects='years10cen:group')
+
+rectum_5y_model<-brm(surv_5y|se(se_5y)~group+s(years10cen,by=group,k=5)
+     ,family="Gaussian",save_pars = save_pars(all = TRUE),prior=prior_group,seed=17
+     ,data=rectum,iter=7000, warmup=2000,chains=2,cores=1,control = list(adapt_delta = 0.98))
+conditional_effects(rectum_5y_model,effects='years10cen:group')
+```
+
+### Defining Small intestine models
+```{r, results = 'hide', cache=TRUE}
+set.seed(17)
+small_intestine_1y_model<-brm(surv_1y|se(se_1y)~group+s(years10cen,by=group,k=5),
+   family="Gaussian",save_pars = save_pars(all = TRUE),prior=prior_group,seed=17,
+   data=small_intestine,iter=7000, warmup=2000,
+   chains=2,cores=1,control = list(adapt_delta = 0.98))
+conditional_effects(small_intestine_1y_model,effects='years10cen:group')
+
+small_intestine_5y_model<-brm(surv_5y|se(se_5y)~group+s(years10cen,by=group,k=5)
+    ,family="Gaussian",save_pars = save_pars(all = TRUE),prior=prior_group,seed=17
+   ,data=small_intestine,iter=7000, warmup=2000,chains=2,cores=1,control = list(adapt_delta = 0.98))
+conditional_effects(small_intestine_5y_model,effects='years10cen:group')
+```
+
+## Diagnostics of models
+
+\normalsize
+In general, diagnostics uses:
+
+[1] *summary(model)*: the columns of intereste are ***Rhat*** (when = 1, model converged well), and columns ***Tail_ESS*** and ***Bulk_ESS*** which should never go under 1,000 and should be mostly above 2,000.  
+
+[2] *pp_check* : graphical tools to explore how well the model predicts real data. 
+
+[not shown in this report] : use also *plot(model)* (not shown as it produces a lot of figures). 
+
+### Colon model diagnostics
+```{r,cache=TRUE}
+summary(colon_1y_model)
+summary(colon_5y_model)
+
+pla<-pp_check(colon_1y_model,type='dens_overlay',ndraws = 100) 
+plb<-pp_check(colon_5y_model,type='dens_overlay',ndraws = 100) 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type='scatter_avg') 
+plb<-pp_check(colon_5y_model,type='scatter_avg') 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type='ecdf_overlay',ndraws = 100) 
+plb<-pp_check(colon_5y_model,type='ecdf_overlay',ndraws = 100) 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type ="stat", stat = "mean")
+plb<-pp_check(colon_5y_model,type = "stat", stat = "mean")
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type="stat_2d", stat = c("max", "min"),ndraws=200)
+plb<-pp_check(colon_5y_model,type="stat_2d", stat = c("max", "min"),ndraws=200)
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+```
+
+
+### Rectum models diagnostics
+```{r,cache=TRUE}
+summary(colon_1y_model)
+summary(colon_5y_model)
+
+pla<-pp_check(colon_1y_model,type='dens_overlay',ndraws = 100) 
+plb<-pp_check(colon_5y_model,type='dens_overlay',ndraws = 100) 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type='scatter_avg') 
+plb<-pp_check(colon_5y_model,type='scatter_avg') 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type='ecdf_overlay',ndraws = 100) 
+plb<-pp_check(colon_5y_model,type='ecdf_overlay',ndraws = 100) 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type ="stat", stat = "mean")
+plb<-pp_check(colon_5y_model,type = "stat", stat = "mean")
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(colon_1y_model,type="stat_2d", stat = c("max", "min"),ndraws=200)
+plb<-pp_check(colon_5y_model,type="stat_2d", stat = c("max", "min"),ndraws=200)
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+```
+
+### Small intestine diag.
+```{r,cache=TRUE}
+summary(small_intestine_1y_model)
+summary(small_intestine_5y_model)
+
+pla<-pp_check(small_intestine_1y_model,type='dens_overlay',ndraws = 100) 
+plb<-pp_check(small_intestine_5y_model,type='dens_overlay',ndraws = 100) 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(small_intestine_1y_model,type='scatter_avg') 
+plb<-pp_check(small_intestine_5y_model,type='scatter_avg') 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(small_intestine_1y_model,type='ecdf_overlay',ndraws = 100) 
+plb<-pp_check(small_intestine_5y_model,type='ecdf_overlay',ndraws = 100) 
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(small_intestine_1y_model,type ="stat", stat = "mean")
+plb<-pp_check(small_intestine_5y_model,type = "stat", stat = "mean")
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+
+pla<-pp_check(small_intestine_1y_model,type="stat_2d", stat = c("max", "min"),ndraws=200)
+plb<-pp_check(small_intestine_5y_model,type="stat_2d", stat = c("max", "min"),ndraws=200)
+plot_grid(pla, plb, labels=c("A", "B"), ncol = 1, nrow = 2)
+```
+
+
+## Extraction of posterior samples
+
+### Colon models samples
+
+\small
+```{r}
+first <- expand.grid(years10cen = seq(-2.45, 2.45, length=500),
+                     group = c('Denmark.Females','Finland.Females','Norway.Females','Sweden.Females','Denmark.Males','Finland.Males','Norway.Males','Sweden.Males'), y = 0)
+yreal <- (first[,1]*10)+1995.5 
+ms_1y<-posterior_smooths(colon_1y_model,smooth="s(years10cen,by=group,k=5)",newdata = first)
+post_fix<-as.data.frame(colon_1y_model, variable = c("b_Intercept","b_groupFinland.Females","b_groupNorway.Females","b_groupSweden.Females","b_groupDenmark.Males", "b_groupFinland.Males","b_groupNorway.Males","b_groupSweden.Males"))
+
+post_colon_den_fem_1y<-ms_1y[,1:500]     +post_fix[,1]
+post_colon_fin_fem_1y<-ms_1y[,501:1000]  +post_fix[,1]+post_fix[,2]
+post_colon_nor_fem_1y<-ms_1y[,1001:1500] +post_fix[,1]+post_fix[,3]
+post_colon_swe_fem_1y<-ms_1y[,1501:2000] +post_fix[,1]+post_fix[,4]
+post_colon_den_mal_1y<-ms_1y[,2001:2500] +post_fix[,1]+post_fix[,5]
+post_colon_fin_mal_1y<-ms_1y[,2501:3000] +post_fix[,1]+post_fix[,6]
+post_colon_nor_mal_1y<-ms_1y[,3001:3500] +post_fix[,1]+post_fix[,7]
+post_colon_swe_mal_1y<-ms_1y[,3501:4000] +post_fix[,1]+post_fix[,8]
+
+post_fix<-as.data.frame(colon_5y_model, variable = c("b_Intercept","b_groupFinland.Females", "b_groupNorway.Females","b_groupSweden.Females","b_groupDenmark.Males","b_groupFinland.Males","b_groupNorway.Males","b_groupSweden.Males"))
+ms_5y<-posterior_smooths(colon_5y_model,smooth="s(years10cen,by=group,k=5)",newdata = first)
+post_colon_den_fem_5y<-ms_5y[,1:500]     +post_fix[,1]
+post_colon_fin_fem_5y<-ms_5y[,501:1000]  +post_fix[,1]+post_fix[,2]
+post_colon_nor_fem_5y<-ms_5y[,1001:1500] +post_fix[,1]+post_fix[,3]
+post_colon_swe_fem_5y<-ms_5y[,1501:2000] +post_fix[,1]+post_fix[,4]
+post_colon_den_mal_5y<-ms_5y[,2001:2500] +post_fix[,1]+post_fix[,5]
+post_colon_fin_mal_5y<-ms_5y[,2501:3000] +post_fix[,1]+post_fix[,6]
+post_colon_nor_mal_5y<-ms_5y[,3001:3500] +post_fix[,1]+post_fix[,7]
+post_colon_swe_mal_5y<-ms_5y[,3501:4000] +post_fix[,1]+post_fix[,8]
+
+post_colon_den_fem_cond<-(post_colon_den_fem_5y/post_colon_den_fem_1y)*100
+post_colon_den_mal_cond<-(post_colon_den_mal_5y/post_colon_den_mal_1y)*100
+post_colon_fin_fem_cond<-(post_colon_fin_fem_5y/post_colon_fin_fem_1y)*100
+post_colon_fin_mal_cond<-(post_colon_fin_mal_5y/post_colon_fin_mal_1y)*100
+post_colon_nor_fem_cond<-(post_colon_nor_fem_5y/post_colon_nor_fem_1y)*100
+post_colon_nor_mal_cond<-(post_colon_nor_mal_5y/post_colon_nor_mal_1y)*100
+post_colon_swe_fem_cond<-(post_colon_swe_fem_5y/post_colon_swe_fem_1y)*100
+post_colon_swe_mal_cond<-(post_colon_swe_mal_5y/post_colon_swe_mal_1y)*100
+```
+
+### Rectum models samples
+\small
+```{r}
+ms_1y<-posterior_smooths(rectum_1y_model,smooth="s(years10cen,by=group,k=5)",newdata = first)
+post_fix<-as.data.frame(rectum_1y_model, variable = c("b_Intercept","b_groupFinland.Females","b_groupNorway.Females","b_groupSweden.Females","b_groupDenmark.Males","b_groupFinland.Males","b_groupNorway.Males","b_groupSweden.Males"))
+
+post_rectum_den_fem_1y<-ms_1y[,1:500]     +post_fix[,1]
+post_rectum_fin_fem_1y<-ms_1y[,501:1000]  +post_fix[,1]+post_fix[,2]
+post_rectum_nor_fem_1y<-ms_1y[,1001:1500] +post_fix[,1]+post_fix[,3]
+post_rectum_swe_fem_1y<-ms_1y[,1501:2000] +post_fix[,1]+post_fix[,4]
+post_rectum_den_mal_1y<-ms_1y[,2001:2500] +post_fix[,1]+post_fix[,5]
+post_rectum_fin_mal_1y<-ms_1y[,2501:3000] +post_fix[,1]+post_fix[,6]
+post_rectum_nor_mal_1y<-ms_1y[,3001:3500] +post_fix[,1]+post_fix[,7]
+post_rectum_swe_mal_1y<-ms_1y[,3501:4000] +post_fix[,1]+post_fix[,8]
+
+post_fix<-as.data.frame(rectum_5y_model, variable = c("b_Intercept","b_groupFinland.Females","b_groupNorway.Females","b_groupSweden.Females","b_groupDenmark.Males","b_groupFinland.Males","b_groupNorway.Males","b_groupSweden.Males"))
+ms_5y<-posterior_smooths(rectum_5y_model,smooth="s(years10cen,by=group,k=5)",newdata = first)
+post_rectum_den_fem_5y<-ms_5y[,1:500]     +post_fix[,1]
+post_rectum_fin_fem_5y<-ms_5y[,501:1000]  +post_fix[,1]+post_fix[,2]
+post_rectum_nor_fem_5y<-ms_5y[,1001:1500] +post_fix[,1]+post_fix[,3]
+post_rectum_swe_fem_5y<-ms_5y[,1501:2000] +post_fix[,1]+post_fix[,4]
+post_rectum_den_mal_5y<-ms_5y[,2001:2500] +post_fix[,1]+post_fix[,5]
+post_rectum_fin_mal_5y<-ms_5y[,2501:3000] +post_fix[,1]+post_fix[,6]
+post_rectum_nor_mal_5y<-ms_5y[,3001:3500] +post_fix[,1]+post_fix[,7]
+post_rectum_swe_mal_5y<-ms_5y[,3501:4000] +post_fix[,1]+post_fix[,8]
+
+post_rectum_den_fem_cond<-(post_rectum_den_fem_5y/post_rectum_den_fem_1y)*100
+post_rectum_den_mal_cond<-(post_rectum_den_mal_5y/post_rectum_den_mal_1y)*100
+post_rectum_fin_fem_cond<-(post_rectum_fin_fem_5y/post_rectum_fin_fem_1y)*100
+post_rectum_fin_mal_cond<-(post_rectum_fin_mal_5y/post_rectum_fin_mal_1y)*100
+post_rectum_nor_fem_cond<-(post_rectum_nor_fem_5y/post_rectum_nor_fem_1y)*100
+post_rectum_nor_mal_cond<-(post_rectum_nor_mal_5y/post_rectum_nor_mal_1y)*100
+post_rectum_swe_fem_cond<-(post_rectum_swe_fem_5y/post_rectum_swe_fem_1y)*100
+post_rectum_swe_mal_cond<-(post_rectum_swe_mal_5y/post_rectum_swe_mal_1y)*100
+```
+
+### Small intestine posteriors
+\small
+```{r}
+ms_1y<-posterior_smooths(small_intestine_1y_model,smooth="s(years10cen,by=group,k=5)",newdata = first)
+post_fix<-as.data.frame(small_intestine_1y_model, variable = c("b_Intercept", "b_groupFinland.Females","b_groupNorway.Females","b_groupSweden.Females","b_groupDenmark.Males" ,"b_groupFinland.Males","b_groupNorway.Males","b_groupSweden.Males"))
+
+post_small_intestine_den_fem_1y<-ms_1y[,1:500]     +post_fix[,1]
+post_small_intestine_fin_fem_1y<-ms_1y[,501:1000]  +post_fix[,1]+post_fix[,2]
+post_small_intestine_nor_fem_1y<-ms_1y[,1001:1500] +post_fix[,1]+post_fix[,3]
+post_small_intestine_swe_fem_1y<-ms_1y[,1501:2000] +post_fix[,1]+post_fix[,4]
+post_small_intestine_den_mal_1y<-ms_1y[,2001:2500] +post_fix[,1]+post_fix[,5]
+post_small_intestine_fin_mal_1y<-ms_1y[,2501:3000] +post_fix[,1]+post_fix[,6]
+post_small_intestine_nor_mal_1y<-ms_1y[,3001:3500] +post_fix[,1]+post_fix[,7]
+post_small_intestine_swe_mal_1y<-ms_1y[,3501:4000] +post_fix[,1]+post_fix[,8]
+
+post_fix<-as.data.frame(small_intestine_5y_model, variable = c("b_Intercept",
+    "b_groupFinland.Females","b_groupNorway.Females","b_groupSweden.Females",
+    "b_groupDenmark.Males","b_groupFinland.Males","b_groupNorway.Males","b_groupSweden.Males"))
+ms_5y<-posterior_smooths(small_intestine_5y_model,smooth="s(years10cen,by=group,k=5)",newdata = first)
+post_small_intestine_den_fem_5y<-ms_5y[,1:500]     +post_fix[,1]
+post_small_intestine_fin_fem_5y<-ms_5y[,501:1000]  +post_fix[,1]+post_fix[,2]
+post_small_intestine_nor_fem_5y<-ms_5y[,1001:1500] +post_fix[,1]+post_fix[,3]
+post_small_intestine_swe_fem_5y<-ms_5y[,1501:2000] +post_fix[,1]+post_fix[,4]
+post_small_intestine_den_mal_5y<-ms_5y[,2001:2500] +post_fix[,1]+post_fix[,5]
+post_small_intestine_fin_mal_5y<-ms_5y[,2501:3000] +post_fix[,1]+post_fix[,6]
+post_small_intestine_nor_mal_5y<-ms_5y[,3001:3500] +post_fix[,1]+post_fix[,7]
+post_small_intestine_swe_mal_5y<-ms_5y[,3501:4000] +post_fix[,1]+post_fix[,8]
+
+post_small_intestine_den_fem_cond<-(post_small_intestine_den_fem_5y/post_small_intestine_den_fem_1y)*100
+post_small_intestine_den_mal_cond<-(post_small_intestine_den_mal_5y/post_small_intestine_den_mal_1y)*100
+post_small_intestine_fin_fem_cond<-(post_small_intestine_fin_fem_5y/post_small_intestine_fin_fem_1y)*100
+post_small_intestine_fin_mal_cond<-(post_small_intestine_fin_mal_5y/post_small_intestine_fin_mal_1y)*100
+post_small_intestine_nor_fem_cond<-(post_small_intestine_nor_fem_5y/post_small_intestine_nor_fem_1y)*100
+post_small_intestine_nor_mal_cond<-(post_small_intestine_nor_mal_5y/post_small_intestine_nor_mal_1y)*100
+post_small_intestine_swe_fem_cond<-(post_small_intestine_swe_fem_5y/post_small_intestine_swe_fem_1y)*100
+post_small_intestine_swe_mal_cond<-(post_small_intestine_swe_mal_5y/post_small_intestine_swe_mal_1y)*100
+
+```
+
+## Samples for Visualisation
+\normalsize
+
+The following code wrangles the posterior samples into a form useful for further visualization. It extracts posterior samples for the 1st (slope of survival trend) and the 2nd (change of the trend) derivations of a given relative survival measure. It also uses posterior samples for prediction lines and a 95% credible interval (CI) for relative survival over time and the 1st and 2nd derivations of the survival measure over time. 
+```{r}
+## Colon cancer ------------------------------------------------------------
+
+### 1y ----------------------------------------------------------------------
+slope_den_colon_mal_1y<-(post_colon_den_mal_1y[,-1] - post_colon_den_mal_1y[,-ncol(post_colon_den_mal_1y)])*10
+slope_den_colon_mal_1y<-data.frame(slope_den_colon_mal_1y)
+slope_den_colon_fem_1y<-(post_colon_den_fem_1y[,-1] - post_colon_den_fem_1y[,-ncol(post_colon_den_fem_1y)])*10
+slope_den_colon_fem_1y<-data.frame(slope_den_colon_fem_1y)
+
+slope_fin_colon_mal_1y<-(post_colon_fin_mal_1y[,-1] - post_colon_fin_mal_1y[,-ncol(post_colon_fin_mal_1y)])*10
+slope_fin_colon_mal_1y<-data.frame(slope_fin_colon_mal_1y)
+slope_fin_colon_fem_1y<-(post_colon_fin_fem_1y[,-1] - post_colon_fin_fem_1y[,-ncol(post_colon_fin_fem_1y)])*10
+slope_fin_colon_fem_1y<-data.frame(slope_fin_colon_fem_1y)
+
+slope_nor_colon_mal_1y<-(post_colon_nor_mal_1y[,-1] - post_colon_nor_mal_1y[,-ncol(post_colon_nor_mal_1y)])*10
+slope_nor_colon_mal_1y<-data.frame(slope_nor_colon_mal_1y)
+slope_nor_colon_fem_1y<-(post_colon_nor_fem_1y[,-1] - post_colon_nor_fem_1y[,-ncol(post_colon_nor_fem_1y)])*10
+slope_nor_colon_fem_1y<-data.frame(slope_nor_colon_fem_1y)
+
+slope_swe_colon_mal_1y<-(post_colon_swe_mal_1y[,-1] - post_colon_swe_mal_1y[,-ncol(post_colon_swe_mal_1y)])*10
+slope_swe_colon_mal_1y<-data.frame(slope_swe_colon_mal_1y)
+slope_swe_colon_fem_1y<-(post_colon_swe_fem_1y[,-1] - post_colon_swe_fem_1y[,-ncol(post_colon_swe_fem_1y)])*10
+slope_swe_colon_fem_1y<-data.frame(slope_swe_colon_fem_1y)
+
+cis_den_colon_mal_1y<-sapply(slope_den_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_colon_fem_1y<-sapply(slope_den_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_colon_mal_1y<-sapply(slope_fin_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_colon_fem_1y<-sapply(slope_fin_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_colon_mal_1y<-sapply(slope_nor_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_colon_fem_1y<-sapply(slope_nor_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_colon_mal_1y<-sapply(slope_swe_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_colon_fem_1y<-sapply(slope_swe_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_colon_mal_1y<-(slope_den_colon_mal_1y[,-1] - slope_den_colon_mal_1y[,-ncol(slope_den_colon_mal_1y)])
+dede_den_colon_mal_1y<-data.frame(dede_den_colon_mal_1y)
+dede_den_colon_fem_1y<-(slope_den_colon_fem_1y[,-1] - slope_den_colon_fem_1y[,-ncol(slope_den_colon_fem_1y)])
+dede_den_colon_fem_1y<-data.frame(dede_den_colon_fem_1y)
+
+dede_fin_colon_mal_1y<-(slope_fin_colon_mal_1y[,-1] - slope_fin_colon_mal_1y[,-ncol(slope_fin_colon_mal_1y)])
+dede_fin_colon_mal_1y<-data.frame(dede_fin_colon_mal_1y)
+dede_fin_colon_fem_1y<-(slope_fin_colon_fem_1y[,-1] - slope_fin_colon_fem_1y[,-ncol(slope_fin_colon_fem_1y)])
+dede_fin_colon_fem_1y<-data.frame(dede_fin_colon_fem_1y)
+
+dede_nor_colon_mal_1y<-(slope_nor_colon_mal_1y[,-1] - slope_nor_colon_mal_1y[,-ncol(slope_nor_colon_mal_1y)])
+dede_nor_colon_mal_1y<-data.frame(dede_nor_colon_mal_1y)
+dede_nor_colon_fem_1y<-(slope_nor_colon_fem_1y[,-1] - slope_nor_colon_fem_1y[,-ncol(slope_nor_colon_fem_1y)])
+dede_nor_colon_fem_1y<-data.frame(dede_nor_colon_fem_1y)
+
+dede_swe_colon_mal_1y<-(slope_swe_colon_mal_1y[,-1] - slope_swe_colon_mal_1y[,-ncol(slope_swe_colon_mal_1y)])
+dede_swe_colon_mal_1y<-data.frame(dede_swe_colon_mal_1y)
+dede_swe_colon_fem_1y<-(slope_swe_colon_fem_1y[,-1] - slope_swe_colon_fem_1y[,-ncol(slope_swe_colon_fem_1y)])
+dede_swe_colon_fem_1y<-data.frame(dede_swe_colon_fem_1y)
+
+post_colon_den_mal_1y<-data.frame(post_colon_den_mal_1y)
+cis2_colon_den_mal_1y<-sapply(post_colon_den_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_den_mal_1y<-c(cis2_colon_den_mal_1y[1,],rev(cis2_colon_den_mal_1y[2,]))
+
+post_colon_fin_mal_1y<-data.frame(post_colon_fin_mal_1y)
+cis2_colon_fin_mal_1y<-sapply(post_colon_fin_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_fin_mal_1y<-c(cis2_colon_fin_mal_1y[1,],rev(cis2_colon_fin_mal_1y[2,]))
+
+post_colon_nor_mal_1y<-data.frame(post_colon_nor_mal_1y)
+cis2_colon_nor_mal_1y<-sapply(post_colon_nor_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_nor_mal_1y<-c(cis2_colon_nor_mal_1y[1,],rev(cis2_colon_nor_mal_1y[2,]))
+
+post_colon_swe_mal_1y<-data.frame(post_colon_swe_mal_1y)
+cis2_colon_swe_mal_1y<-sapply(post_colon_swe_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_swe_mal_1y<-c(cis2_colon_swe_mal_1y[1,],rev(cis2_colon_swe_mal_1y[2,]))
+
+post_colon_den_fem_1y<-data.frame(post_colon_den_fem_1y)
+cis2_colon_den_fem_1y<-sapply(post_colon_den_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_den_fem_1y<-c(cis2_colon_den_fem_1y[1,],rev(cis2_colon_den_fem_1y[2,]))
+
+post_colon_fin_fem_1y<-data.frame(post_colon_fin_fem_1y)
+cis2_colon_fin_fem_1y<-sapply(post_colon_fin_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_fin_fem_1y<-c(cis2_colon_fin_fem_1y[1,],rev(cis2_colon_fin_fem_1y[2,]))
+
+post_colon_nor_fem_1y<-data.frame(post_colon_nor_fem_1y)
+cis2_colon_nor_fem_1y<-sapply(post_colon_nor_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_nor_fem_1y<-c(cis2_colon_nor_fem_1y[1,],rev(cis2_colon_nor_fem_1y[2,]))
+
+post_colon_swe_fem_1y<-data.frame(post_colon_swe_fem_1y)
+cis2_colon_swe_fem_1y<-sapply(post_colon_swe_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_swe_fem_1y<-c(cis2_colon_swe_fem_1y[1,],rev(cis2_colon_swe_fem_1y[2,]))
+
+cis3_den_colon_mal_1y<-sapply(dede_den_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_colon_fem_1y<-sapply(dede_den_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_colon_mal_1y<-sapply(dede_fin_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_colon_fem_1y<-sapply(dede_fin_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_colon_mal_1y<-sapply(dede_nor_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_colon_fem_1y<-sapply(dede_nor_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_colon_mal_1y<-sapply(dede_swe_colon_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_colon_fem_1y<-sapply(dede_swe_colon_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+### 5y ----------------------------------------------------------------------
+
+slope_den_colon_mal_5y<-(post_colon_den_mal_5y[,-1] - post_colon_den_mal_5y[,-ncol(post_colon_den_mal_5y)])*10
+slope_den_colon_mal_5y<-data.frame(slope_den_colon_mal_5y)
+slope_den_colon_fem_5y<-(post_colon_den_fem_5y[,-1] - post_colon_den_fem_5y[,-ncol(post_colon_den_fem_5y)])*10
+slope_den_colon_fem_5y<-data.frame(slope_den_colon_fem_5y)
+
+slope_fin_colon_mal_5y<-(post_colon_fin_mal_5y[,-1] - post_colon_fin_mal_5y[,-ncol(post_colon_fin_mal_5y)])*10
+slope_fin_colon_mal_5y<-data.frame(slope_fin_colon_mal_5y)
+slope_fin_colon_fem_5y<-(post_colon_fin_fem_5y[,-1] - post_colon_fin_fem_5y[,-ncol(post_colon_fin_fem_5y)])*10
+slope_fin_colon_fem_5y<-data.frame(slope_fin_colon_fem_5y)
+
+slope_nor_colon_mal_5y<-(post_colon_nor_mal_5y[,-1] - post_colon_nor_mal_5y[,-ncol(post_colon_nor_mal_5y)])*10
+slope_nor_colon_mal_5y<-data.frame(slope_nor_colon_mal_5y)
+slope_nor_colon_fem_5y<-(post_colon_nor_fem_5y[,-1] - post_colon_nor_fem_5y[,-ncol(post_colon_nor_fem_5y)])*10
+slope_nor_colon_fem_5y<-data.frame(slope_nor_colon_fem_5y)
+
+slope_swe_colon_mal_5y<-(post_colon_swe_mal_5y[,-1] - post_colon_swe_mal_5y[,-ncol(post_colon_swe_mal_5y)])*10
+slope_swe_colon_mal_5y<-data.frame(slope_swe_colon_mal_5y)
+slope_swe_colon_fem_5y<-(post_colon_swe_fem_5y[,-1] - post_colon_swe_fem_5y[,-ncol(post_colon_swe_fem_5y)])*10
+slope_swe_colon_fem_5y<-data.frame(slope_swe_colon_fem_5y)
+
+cis_den_colon_mal_5y<-sapply(slope_den_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_colon_fem_5y<-sapply(slope_den_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_colon_mal_5y<-sapply(slope_fin_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_colon_fem_5y<-sapply(slope_fin_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_colon_mal_5y<-sapply(slope_nor_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_colon_fem_5y<-sapply(slope_nor_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_colon_mal_5y<-sapply(slope_swe_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_colon_fem_5y<-sapply(slope_swe_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_colon_mal_5y<-(slope_den_colon_mal_5y[,-1] - slope_den_colon_mal_5y[,-ncol(slope_den_colon_mal_5y)])
+dede_den_colon_mal_5y<-data.frame(dede_den_colon_mal_5y)
+dede_den_colon_fem_5y<-(slope_den_colon_fem_5y[,-1] - slope_den_colon_fem_5y[,-ncol(slope_den_colon_fem_5y)])
+dede_den_colon_fem_5y<-data.frame(dede_den_colon_fem_5y)
+
+dede_fin_colon_mal_5y<-(slope_fin_colon_mal_5y[,-1] - slope_fin_colon_mal_5y[,-ncol(slope_fin_colon_mal_5y)])
+dede_fin_colon_mal_5y<-data.frame(dede_fin_colon_mal_5y)
+dede_fin_colon_fem_5y<-(slope_fin_colon_fem_5y[,-1] - slope_fin_colon_fem_5y[,-ncol(slope_fin_colon_fem_5y)])
+dede_fin_colon_fem_5y<-data.frame(dede_fin_colon_fem_5y)
+
+dede_nor_colon_mal_5y<-(slope_nor_colon_mal_5y[,-1] - slope_nor_colon_mal_5y[,-ncol(slope_nor_colon_mal_5y)])
+dede_nor_colon_mal_5y<-data.frame(dede_nor_colon_mal_5y)
+dede_nor_colon_fem_5y<-(slope_nor_colon_fem_5y[,-1] - slope_nor_colon_fem_5y[,-ncol(slope_nor_colon_fem_5y)])
+dede_nor_colon_fem_5y<-data.frame(dede_nor_colon_fem_5y)
+
+dede_swe_colon_mal_5y<-(slope_swe_colon_mal_5y[,-1] - slope_swe_colon_mal_5y[,-ncol(slope_swe_colon_mal_5y)])
+dede_swe_colon_mal_5y<-data.frame(dede_swe_colon_mal_5y)
+dede_swe_colon_fem_5y<-(slope_swe_colon_fem_5y[,-1] - slope_swe_colon_fem_5y[,-ncol(slope_swe_colon_fem_5y)])
+dede_swe_colon_fem_5y<-data.frame(dede_swe_colon_fem_5y)
+
+post_colon_den_mal_5y<-data.frame(post_colon_den_mal_5y)
+cis2_colon_den_mal_5y<-sapply(post_colon_den_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_den_mal_5y<-c(cis2_colon_den_mal_5y[1,],rev(cis2_colon_den_mal_5y[2,]))
+
+post_colon_fin_mal_5y<-data.frame(post_colon_fin_mal_5y)
+cis2_colon_fin_mal_5y<-sapply(post_colon_fin_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_fin_mal_5y<-c(cis2_colon_fin_mal_5y[1,],rev(cis2_colon_fin_mal_5y[2,]))
+
+post_colon_nor_mal_5y<-data.frame(post_colon_nor_mal_5y)
+cis2_colon_nor_mal_5y<-sapply(post_colon_nor_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_nor_mal_5y<-c(cis2_colon_nor_mal_5y[1,],rev(cis2_colon_nor_mal_5y[2,]))
+
+post_colon_swe_mal_5y<-data.frame(post_colon_swe_mal_5y)
+cis2_colon_swe_mal_5y<-sapply(post_colon_swe_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_swe_mal_5y<-c(cis2_colon_swe_mal_5y[1,],rev(cis2_colon_swe_mal_5y[2,]))
+
+post_colon_den_fem_5y<-data.frame(post_colon_den_fem_5y)
+cis2_colon_den_fem_5y<-sapply(post_colon_den_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_den_fem_5y<-c(cis2_colon_den_fem_5y[1,],rev(cis2_colon_den_fem_5y[2,]))
+
+post_colon_fin_fem_5y<-data.frame(post_colon_fin_fem_5y)
+cis2_colon_fin_fem_5y<-sapply(post_colon_fin_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_fin_fem_5y<-c(cis2_colon_fin_fem_5y[1,],rev(cis2_colon_fin_fem_5y[2,]))
+
+post_colon_nor_fem_5y<-data.frame(post_colon_nor_fem_5y)
+cis2_colon_nor_fem_5y<-sapply(post_colon_nor_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_nor_fem_5y<-c(cis2_colon_nor_fem_5y[1,],rev(cis2_colon_nor_fem_5y[2,]))
+
+post_colon_swe_fem_5y<-data.frame(post_colon_swe_fem_5y)
+cis2_colon_swe_fem_5y<-sapply(post_colon_swe_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_swe_fem_5y<-c(cis2_colon_swe_fem_5y[1,],rev(cis2_colon_swe_fem_5y[2,]))
+
+cis3_den_colon_mal_5y<-sapply(dede_den_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_colon_fem_5y<-sapply(dede_den_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_colon_mal_5y<-sapply(dede_fin_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_colon_fem_5y<-sapply(dede_fin_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_colon_mal_5y<-sapply(dede_nor_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_colon_fem_5y<-sapply(dede_nor_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_colon_mal_5y<-sapply(dede_swe_colon_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_colon_fem_5y<-sapply(dede_swe_colon_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+### cond --------------------------------------------------------------------
+slope_den_colon_mal_cond<-(post_colon_den_mal_cond[,-1] - post_colon_den_mal_cond[,-ncol(post_colon_den_mal_cond)])*10
+slope_den_colon_mal_cond<-data.frame(slope_den_colon_mal_cond)
+slope_den_colon_fem_cond<-(post_colon_den_fem_cond[,-1] - post_colon_den_fem_cond[,-ncol(post_colon_den_fem_cond)])*10
+slope_den_colon_fem_cond<-data.frame(slope_den_colon_fem_cond)
+
+slope_fin_colon_mal_cond<-(post_colon_fin_mal_cond[,-1] - post_colon_fin_mal_cond[,-ncol(post_colon_fin_mal_cond)])*10
+slope_fin_colon_mal_cond<-data.frame(slope_fin_colon_mal_cond)
+slope_fin_colon_fem_cond<-(post_colon_fin_fem_cond[,-1] - post_colon_fin_fem_cond[,-ncol(post_colon_fin_fem_cond)])*10
+slope_fin_colon_fem_cond<-data.frame(slope_fin_colon_fem_cond)
+
+slope_nor_colon_mal_cond<-(post_colon_nor_mal_cond[,-1] - post_colon_nor_mal_cond[,-ncol(post_colon_nor_mal_cond)])*10
+slope_nor_colon_mal_cond<-data.frame(slope_nor_colon_mal_cond)
+slope_nor_colon_fem_cond<-(post_colon_nor_fem_cond[,-1] - post_colon_nor_fem_cond[,-ncol(post_colon_nor_fem_cond)])*10
+slope_nor_colon_fem_cond<-data.frame(slope_nor_colon_fem_cond)
+
+slope_swe_colon_mal_cond<-(post_colon_swe_mal_cond[,-1] - post_colon_swe_mal_cond[,-ncol(post_colon_swe_mal_cond)])*10
+slope_swe_colon_mal_cond<-data.frame(slope_swe_colon_mal_cond)
+slope_swe_colon_fem_cond<-(post_colon_swe_fem_cond[,-1] - post_colon_swe_fem_cond[,-ncol(post_colon_swe_fem_cond)])*10
+slope_swe_colon_fem_cond<-data.frame(slope_swe_colon_fem_cond)
+
+cis_den_colon_mal_cond<-sapply(slope_den_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_colon_fem_cond<-sapply(slope_den_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_colon_mal_cond<-sapply(slope_fin_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_colon_fem_cond<-sapply(slope_fin_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_colon_mal_cond<-sapply(slope_nor_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_colon_fem_cond<-sapply(slope_nor_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_colon_mal_cond<-sapply(slope_swe_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_colon_fem_cond<-sapply(slope_swe_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_colon_mal_cond<-(slope_den_colon_mal_cond[,-1] - slope_den_colon_mal_cond[,-ncol(slope_den_colon_mal_cond)])
+dede_den_colon_mal_cond<-data.frame(dede_den_colon_mal_cond)
+dede_den_colon_fem_cond<-(slope_den_colon_fem_cond[,-1] - slope_den_colon_fem_cond[,-ncol(slope_den_colon_fem_cond)])
+dede_den_colon_fem_cond<-data.frame(dede_den_colon_fem_cond)
+
+dede_fin_colon_mal_cond<-(slope_fin_colon_mal_cond[,-1] - slope_fin_colon_mal_cond[,-ncol(slope_fin_colon_mal_cond)])
+dede_fin_colon_mal_cond<-data.frame(dede_fin_colon_mal_cond)
+dede_fin_colon_fem_cond<-(slope_fin_colon_fem_cond[,-1] - slope_fin_colon_fem_cond[,-ncol(slope_fin_colon_fem_cond)])
+dede_fin_colon_fem_cond<-data.frame(dede_fin_colon_fem_cond)
+
+dede_nor_colon_mal_cond<-(slope_nor_colon_mal_cond[,-1] - slope_nor_colon_mal_cond[,-ncol(slope_nor_colon_mal_cond)])
+dede_nor_colon_mal_cond<-data.frame(dede_nor_colon_mal_cond)
+dede_nor_colon_fem_cond<-(slope_nor_colon_fem_cond[,-1] - slope_nor_colon_fem_cond[,-ncol(slope_nor_colon_fem_cond)])
+dede_nor_colon_fem_cond<-data.frame(dede_nor_colon_fem_cond)
+
+dede_swe_colon_mal_cond<-(slope_swe_colon_mal_cond[,-1] - slope_swe_colon_mal_cond[,-ncol(slope_swe_colon_mal_cond)])
+dede_swe_colon_mal_cond<-data.frame(dede_swe_colon_mal_cond)
+dede_swe_colon_fem_cond<-(slope_swe_colon_fem_cond[,-1] - slope_swe_colon_fem_cond[,-ncol(slope_swe_colon_fem_cond)])
+dede_swe_colon_fem_cond<-data.frame(dede_swe_colon_fem_cond)
+
+post_colon_den_mal_cond<-data.frame(post_colon_den_mal_cond)
+cis2_colon_den_mal_cond<-sapply(post_colon_den_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_den_mal_cond<-c(cis2_colon_den_mal_cond[1,],rev(cis2_colon_den_mal_cond[2,]))
+
+post_colon_fin_mal_cond<-data.frame(post_colon_fin_mal_cond)
+cis2_colon_fin_mal_cond<-sapply(post_colon_fin_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_fin_mal_cond<-c(cis2_colon_fin_mal_cond[1,],rev(cis2_colon_fin_mal_cond[2,]))
+
+post_colon_nor_mal_cond<-data.frame(post_colon_nor_mal_cond)
+cis2_colon_nor_mal_cond<-sapply(post_colon_nor_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_nor_mal_cond<-c(cis2_colon_nor_mal_cond[1,],rev(cis2_colon_nor_mal_cond[2,]))
+
+post_colon_swe_mal_cond<-data.frame(post_colon_swe_mal_cond)
+cis2_colon_swe_mal_cond<-sapply(post_colon_swe_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_swe_mal_cond<-c(cis2_colon_swe_mal_cond[1,],rev(cis2_colon_swe_mal_cond[2,]))
+
+post_colon_den_fem_cond<-data.frame(post_colon_den_fem_cond)
+cis2_colon_den_fem_cond<-sapply(post_colon_den_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_den_fem_cond<-c(cis2_colon_den_fem_cond[1,],rev(cis2_colon_den_fem_cond[2,]))
+
+post_colon_fin_fem_cond<-data.frame(post_colon_fin_fem_cond)
+cis2_colon_fin_fem_cond<-sapply(post_colon_fin_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_fin_fem_cond<-c(cis2_colon_fin_fem_cond[1,],rev(cis2_colon_fin_fem_cond[2,]))
+
+post_colon_nor_fem_cond<-data.frame(post_colon_nor_fem_cond)
+cis2_colon_nor_fem_cond<-sapply(post_colon_nor_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_nor_fem_cond<-c(cis2_colon_nor_fem_cond[1,],rev(cis2_colon_nor_fem_cond[2,]))
+
+post_colon_swe_fem_cond<-data.frame(post_colon_swe_fem_cond)
+cis2_colon_swe_fem_cond<-sapply(post_colon_swe_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_colon_swe_fem_cond<-c(cis2_colon_swe_fem_cond[1,],rev(cis2_colon_swe_fem_cond[2,]))
+
+cis3_den_colon_mal_cond<-sapply(dede_den_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_colon_fem_cond<-sapply(dede_den_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_colon_mal_cond<-sapply(dede_fin_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_colon_fem_cond<-sapply(dede_fin_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_colon_mal_cond<-sapply(dede_nor_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_colon_fem_cond<-sapply(dede_nor_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_colon_mal_cond<-sapply(dede_swe_colon_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_colon_fem_cond<-sapply(dede_swe_colon_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+
+
+## rectum cancer ------------------------------------------------------------
+
+### 1y ----------------------------------------------------------------------
+slope_den_rectum_mal_1y<-(post_rectum_den_mal_1y[,-1] - post_rectum_den_mal_1y[,-ncol(post_rectum_den_mal_1y)])*10
+slope_den_rectum_mal_1y<-data.frame(slope_den_rectum_mal_1y)
+slope_den_rectum_fem_1y<-(post_rectum_den_fem_1y[,-1] - post_rectum_den_fem_1y[,-ncol(post_rectum_den_fem_1y)])*10
+slope_den_rectum_fem_1y<-data.frame(slope_den_rectum_fem_1y)
+
+slope_fin_rectum_mal_1y<-(post_rectum_fin_mal_1y[,-1] - post_rectum_fin_mal_1y[,-ncol(post_rectum_fin_mal_1y)])*10
+slope_fin_rectum_mal_1y<-data.frame(slope_fin_rectum_mal_1y)
+slope_fin_rectum_fem_1y<-(post_rectum_fin_fem_1y[,-1] - post_rectum_fin_fem_1y[,-ncol(post_rectum_fin_fem_1y)])*10
+slope_fin_rectum_fem_1y<-data.frame(slope_fin_rectum_fem_1y)
+
+slope_nor_rectum_mal_1y<-(post_rectum_nor_mal_1y[,-1] - post_rectum_nor_mal_1y[,-ncol(post_rectum_nor_mal_1y)])*10
+slope_nor_rectum_mal_1y<-data.frame(slope_nor_rectum_mal_1y)
+slope_nor_rectum_fem_1y<-(post_rectum_nor_fem_1y[,-1] - post_rectum_nor_fem_1y[,-ncol(post_rectum_nor_fem_1y)])*10
+slope_nor_rectum_fem_1y<-data.frame(slope_nor_rectum_fem_1y)
+
+slope_swe_rectum_mal_1y<-(post_rectum_swe_mal_1y[,-1] - post_rectum_swe_mal_1y[,-ncol(post_rectum_swe_mal_1y)])*10
+slope_swe_rectum_mal_1y<-data.frame(slope_swe_rectum_mal_1y)
+slope_swe_rectum_fem_1y<-(post_rectum_swe_fem_1y[,-1] - post_rectum_swe_fem_1y[,-ncol(post_rectum_swe_fem_1y)])*10
+slope_swe_rectum_fem_1y<-data.frame(slope_swe_rectum_fem_1y)
+
+cis_den_rectum_mal_1y<-sapply(slope_den_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_rectum_fem_1y<-sapply(slope_den_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_rectum_mal_1y<-sapply(slope_fin_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_rectum_fem_1y<-sapply(slope_fin_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_rectum_mal_1y<-sapply(slope_nor_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_rectum_fem_1y<-sapply(slope_nor_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_rectum_mal_1y<-sapply(slope_swe_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_rectum_fem_1y<-sapply(slope_swe_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_rectum_mal_1y<-(slope_den_rectum_mal_1y[,-1] - slope_den_rectum_mal_1y[,-ncol(slope_den_rectum_mal_1y)])
+dede_den_rectum_mal_1y<-data.frame(dede_den_rectum_mal_1y)
+dede_den_rectum_fem_1y<-(slope_den_rectum_fem_1y[,-1] - slope_den_rectum_fem_1y[,-ncol(slope_den_rectum_fem_1y)])
+dede_den_rectum_fem_1y<-data.frame(dede_den_rectum_fem_1y)
+
+dede_fin_rectum_mal_1y<-(slope_fin_rectum_mal_1y[,-1] - slope_fin_rectum_mal_1y[,-ncol(slope_fin_rectum_mal_1y)])
+dede_fin_rectum_mal_1y<-data.frame(dede_fin_rectum_mal_1y)
+dede_fin_rectum_fem_1y<-(slope_fin_rectum_fem_1y[,-1] - slope_fin_rectum_fem_1y[,-ncol(slope_fin_rectum_fem_1y)])
+dede_fin_rectum_fem_1y<-data.frame(dede_fin_rectum_fem_1y)
+
+dede_nor_rectum_mal_1y<-(slope_nor_rectum_mal_1y[,-1] - slope_nor_rectum_mal_1y[,-ncol(slope_nor_rectum_mal_1y)])
+dede_nor_rectum_mal_1y<-data.frame(dede_nor_rectum_mal_1y)
+dede_nor_rectum_fem_1y<-(slope_nor_rectum_fem_1y[,-1] - slope_nor_rectum_fem_1y[,-ncol(slope_nor_rectum_fem_1y)])
+dede_nor_rectum_fem_1y<-data.frame(dede_nor_rectum_fem_1y)
+
+dede_swe_rectum_mal_1y<-(slope_swe_rectum_mal_1y[,-1] - slope_swe_rectum_mal_1y[,-ncol(slope_swe_rectum_mal_1y)])
+dede_swe_rectum_mal_1y<-data.frame(dede_swe_rectum_mal_1y)
+dede_swe_rectum_fem_1y<-(slope_swe_rectum_fem_1y[,-1] - slope_swe_rectum_fem_1y[,-ncol(slope_swe_rectum_fem_1y)])
+dede_swe_rectum_fem_1y<-data.frame(dede_swe_rectum_fem_1y)
+
+post_rectum_den_mal_1y<-data.frame(post_rectum_den_mal_1y)
+cis2_rectum_den_mal_1y<-sapply(post_rectum_den_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_den_mal_1y<-c(cis2_rectum_den_mal_1y[1,],rev(cis2_rectum_den_mal_1y[2,]))
+
+post_rectum_fin_mal_1y<-data.frame(post_rectum_fin_mal_1y)
+cis2_rectum_fin_mal_1y<-sapply(post_rectum_fin_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_fin_mal_1y<-c(cis2_rectum_fin_mal_1y[1,],rev(cis2_rectum_fin_mal_1y[2,]))
+
+post_rectum_nor_mal_1y<-data.frame(post_rectum_nor_mal_1y)
+cis2_rectum_nor_mal_1y<-sapply(post_rectum_nor_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_nor_mal_1y<-c(cis2_rectum_nor_mal_1y[1,],rev(cis2_rectum_nor_mal_1y[2,]))
+
+post_rectum_swe_mal_1y<-data.frame(post_rectum_swe_mal_1y)
+cis2_rectum_swe_mal_1y<-sapply(post_rectum_swe_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_swe_mal_1y<-c(cis2_rectum_swe_mal_1y[1,],rev(cis2_rectum_swe_mal_1y[2,]))
+
+post_rectum_den_fem_1y<-data.frame(post_rectum_den_fem_1y)
+cis2_rectum_den_fem_1y<-sapply(post_rectum_den_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_den_fem_1y<-c(cis2_rectum_den_fem_1y[1,],rev(cis2_rectum_den_fem_1y[2,]))
+
+post_rectum_fin_fem_1y<-data.frame(post_rectum_fin_fem_1y)
+cis2_rectum_fin_fem_1y<-sapply(post_rectum_fin_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_fin_fem_1y<-c(cis2_rectum_fin_fem_1y[1,],rev(cis2_rectum_fin_fem_1y[2,]))
+
+post_rectum_nor_fem_1y<-data.frame(post_rectum_nor_fem_1y)
+cis2_rectum_nor_fem_1y<-sapply(post_rectum_nor_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_nor_fem_1y<-c(cis2_rectum_nor_fem_1y[1,],rev(cis2_rectum_nor_fem_1y[2,]))
+
+post_rectum_swe_fem_1y<-data.frame(post_rectum_swe_fem_1y)
+cis2_rectum_swe_fem_1y<-sapply(post_rectum_swe_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_swe_fem_1y<-c(cis2_rectum_swe_fem_1y[1,],rev(cis2_rectum_swe_fem_1y[2,]))
+
+cis3_den_rectum_mal_1y<-sapply(dede_den_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_rectum_fem_1y<-sapply(dede_den_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_rectum_mal_1y<-sapply(dede_fin_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_rectum_fem_1y<-sapply(dede_fin_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_rectum_mal_1y<-sapply(dede_nor_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_rectum_fem_1y<-sapply(dede_nor_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_rectum_mal_1y<-sapply(dede_swe_rectum_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_rectum_fem_1y<-sapply(dede_swe_rectum_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+### 5y ----------------------------------------------------------------------
+
+slope_den_rectum_mal_5y<-(post_rectum_den_mal_5y[,-1] - post_rectum_den_mal_5y[,-ncol(post_rectum_den_mal_5y)])*10
+slope_den_rectum_mal_5y<-data.frame(slope_den_rectum_mal_5y)
+slope_den_rectum_fem_5y<-(post_rectum_den_fem_5y[,-1] - post_rectum_den_fem_5y[,-ncol(post_rectum_den_fem_5y)])*10
+slope_den_rectum_fem_5y<-data.frame(slope_den_rectum_fem_5y)
+
+slope_fin_rectum_mal_5y<-(post_rectum_fin_mal_5y[,-1] - post_rectum_fin_mal_5y[,-ncol(post_rectum_fin_mal_5y)])*10
+slope_fin_rectum_mal_5y<-data.frame(slope_fin_rectum_mal_5y)
+slope_fin_rectum_fem_5y<-(post_rectum_fin_fem_5y[,-1] - post_rectum_fin_fem_5y[,-ncol(post_rectum_fin_fem_5y)])*10
+slope_fin_rectum_fem_5y<-data.frame(slope_fin_rectum_fem_5y)
+
+slope_nor_rectum_mal_5y<-(post_rectum_nor_mal_5y[,-1] - post_rectum_nor_mal_5y[,-ncol(post_rectum_nor_mal_5y)])*10
+slope_nor_rectum_mal_5y<-data.frame(slope_nor_rectum_mal_5y)
+slope_nor_rectum_fem_5y<-(post_rectum_nor_fem_5y[,-1] - post_rectum_nor_fem_5y[,-ncol(post_rectum_nor_fem_5y)])*10
+slope_nor_rectum_fem_5y<-data.frame(slope_nor_rectum_fem_5y)
+
+slope_swe_rectum_mal_5y<-(post_rectum_swe_mal_5y[,-1] - post_rectum_swe_mal_5y[,-ncol(post_rectum_swe_mal_5y)])*10
+slope_swe_rectum_mal_5y<-data.frame(slope_swe_rectum_mal_5y)
+slope_swe_rectum_fem_5y<-(post_rectum_swe_fem_5y[,-1] - post_rectum_swe_fem_5y[,-ncol(post_rectum_swe_fem_5y)])*10
+slope_swe_rectum_fem_5y<-data.frame(slope_swe_rectum_fem_5y)
+
+cis_den_rectum_mal_5y<-sapply(slope_den_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_rectum_fem_5y<-sapply(slope_den_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_rectum_mal_5y<-sapply(slope_fin_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_rectum_fem_5y<-sapply(slope_fin_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_rectum_mal_5y<-sapply(slope_nor_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_rectum_fem_5y<-sapply(slope_nor_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_rectum_mal_5y<-sapply(slope_swe_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_rectum_fem_5y<-sapply(slope_swe_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_rectum_mal_5y<-(slope_den_rectum_mal_5y[,-1] - slope_den_rectum_mal_5y[,-ncol(slope_den_rectum_mal_5y)])
+dede_den_rectum_mal_5y<-data.frame(dede_den_rectum_mal_5y)
+dede_den_rectum_fem_5y<-(slope_den_rectum_fem_5y[,-1] - slope_den_rectum_fem_5y[,-ncol(slope_den_rectum_fem_5y)])
+dede_den_rectum_fem_5y<-data.frame(dede_den_rectum_fem_5y)
+
+dede_fin_rectum_mal_5y<-(slope_fin_rectum_mal_5y[,-1] - slope_fin_rectum_mal_5y[,-ncol(slope_fin_rectum_mal_5y)])
+dede_fin_rectum_mal_5y<-data.frame(dede_fin_rectum_mal_5y)
+dede_fin_rectum_fem_5y<-(slope_fin_rectum_fem_5y[,-1] - slope_fin_rectum_fem_5y[,-ncol(slope_fin_rectum_fem_5y)])
+dede_fin_rectum_fem_5y<-data.frame(dede_fin_rectum_fem_5y)
+
+dede_nor_rectum_mal_5y<-(slope_nor_rectum_mal_5y[,-1] - slope_nor_rectum_mal_5y[,-ncol(slope_nor_rectum_mal_5y)])
+dede_nor_rectum_mal_5y<-data.frame(dede_nor_rectum_mal_5y)
+dede_nor_rectum_fem_5y<-(slope_nor_rectum_fem_5y[,-1] - slope_nor_rectum_fem_5y[,-ncol(slope_nor_rectum_fem_5y)])
+dede_nor_rectum_fem_5y<-data.frame(dede_nor_rectum_fem_5y)
+
+dede_swe_rectum_mal_5y<-(slope_swe_rectum_mal_5y[,-1] - slope_swe_rectum_mal_5y[,-ncol(slope_swe_rectum_mal_5y)])
+dede_swe_rectum_mal_5y<-data.frame(dede_swe_rectum_mal_5y)
+dede_swe_rectum_fem_5y<-(slope_swe_rectum_fem_5y[,-1] - slope_swe_rectum_fem_5y[,-ncol(slope_swe_rectum_fem_5y)])
+dede_swe_rectum_fem_5y<-data.frame(dede_swe_rectum_fem_5y)
+
+post_rectum_den_mal_5y<-data.frame(post_rectum_den_mal_5y)
+cis2_rectum_den_mal_5y<-sapply(post_rectum_den_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_den_mal_5y<-c(cis2_rectum_den_mal_5y[1,],rev(cis2_rectum_den_mal_5y[2,]))
+
+post_rectum_fin_mal_5y<-data.frame(post_rectum_fin_mal_5y)
+cis2_rectum_fin_mal_5y<-sapply(post_rectum_fin_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_fin_mal_5y<-c(cis2_rectum_fin_mal_5y[1,],rev(cis2_rectum_fin_mal_5y[2,]))
+
+post_rectum_nor_mal_5y<-data.frame(post_rectum_nor_mal_5y)
+cis2_rectum_nor_mal_5y<-sapply(post_rectum_nor_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_nor_mal_5y<-c(cis2_rectum_nor_mal_5y[1,],rev(cis2_rectum_nor_mal_5y[2,]))
+
+post_rectum_swe_mal_5y<-data.frame(post_rectum_swe_mal_5y)
+cis2_rectum_swe_mal_5y<-sapply(post_rectum_swe_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_swe_mal_5y<-c(cis2_rectum_swe_mal_5y[1,],rev(cis2_rectum_swe_mal_5y[2,]))
+
+post_rectum_den_fem_5y<-data.frame(post_rectum_den_fem_5y)
+cis2_rectum_den_fem_5y<-sapply(post_rectum_den_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_den_fem_5y<-c(cis2_rectum_den_fem_5y[1,],rev(cis2_rectum_den_fem_5y[2,]))
+
+post_rectum_fin_fem_5y<-data.frame(post_rectum_fin_fem_5y)
+cis2_rectum_fin_fem_5y<-sapply(post_rectum_fin_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_fin_fem_5y<-c(cis2_rectum_fin_fem_5y[1,],rev(cis2_rectum_fin_fem_5y[2,]))
+
+post_rectum_nor_fem_5y<-data.frame(post_rectum_nor_fem_5y)
+cis2_rectum_nor_fem_5y<-sapply(post_rectum_nor_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_nor_fem_5y<-c(cis2_rectum_nor_fem_5y[1,],rev(cis2_rectum_nor_fem_5y[2,]))
+
+post_rectum_swe_fem_5y<-data.frame(post_rectum_swe_fem_5y)
+cis2_rectum_swe_fem_5y<-sapply(post_rectum_swe_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_swe_fem_5y<-c(cis2_rectum_swe_fem_5y[1,],rev(cis2_rectum_swe_fem_5y[2,]))
+
+cis3_den_rectum_mal_5y<-sapply(dede_den_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_rectum_fem_5y<-sapply(dede_den_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_rectum_mal_5y<-sapply(dede_fin_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_rectum_fem_5y<-sapply(dede_fin_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_rectum_mal_5y<-sapply(dede_nor_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_rectum_fem_5y<-sapply(dede_nor_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_rectum_mal_5y<-sapply(dede_swe_rectum_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_rectum_fem_5y<-sapply(dede_swe_rectum_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+### cond --------------------------------------------------------------------
+slope_den_rectum_mal_cond<-(post_rectum_den_mal_cond[,-1] - post_rectum_den_mal_cond[,-ncol(post_rectum_den_mal_cond)])*10
+slope_den_rectum_mal_cond<-data.frame(slope_den_rectum_mal_cond)
+slope_den_rectum_fem_cond<-(post_rectum_den_fem_cond[,-1] - post_rectum_den_fem_cond[,-ncol(post_rectum_den_fem_cond)])*10
+slope_den_rectum_fem_cond<-data.frame(slope_den_rectum_fem_cond)
+
+slope_fin_rectum_mal_cond<-(post_rectum_fin_mal_cond[,-1] - post_rectum_fin_mal_cond[,-ncol(post_rectum_fin_mal_cond)])*10
+slope_fin_rectum_mal_cond<-data.frame(slope_fin_rectum_mal_cond)
+slope_fin_rectum_fem_cond<-(post_rectum_fin_fem_cond[,-1] - post_rectum_fin_fem_cond[,-ncol(post_rectum_fin_fem_cond)])*10
+slope_fin_rectum_fem_cond<-data.frame(slope_fin_rectum_fem_cond)
+
+slope_nor_rectum_mal_cond<-(post_rectum_nor_mal_cond[,-1] - post_rectum_nor_mal_cond[,-ncol(post_rectum_nor_mal_cond)])*10
+slope_nor_rectum_mal_cond<-data.frame(slope_nor_rectum_mal_cond)
+slope_nor_rectum_fem_cond<-(post_rectum_nor_fem_cond[,-1] - post_rectum_nor_fem_cond[,-ncol(post_rectum_nor_fem_cond)])*10
+slope_nor_rectum_fem_cond<-data.frame(slope_nor_rectum_fem_cond)
+
+slope_swe_rectum_mal_cond<-(post_rectum_swe_mal_cond[,-1] - post_rectum_swe_mal_cond[,-ncol(post_rectum_swe_mal_cond)])*10
+slope_swe_rectum_mal_cond<-data.frame(slope_swe_rectum_mal_cond)
+slope_swe_rectum_fem_cond<-(post_rectum_swe_fem_cond[,-1] - post_rectum_swe_fem_cond[,-ncol(post_rectum_swe_fem_cond)])*10
+slope_swe_rectum_fem_cond<-data.frame(slope_swe_rectum_fem_cond)
+
+cis_den_rectum_mal_cond<-sapply(slope_den_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_rectum_fem_cond<-sapply(slope_den_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_rectum_mal_cond<-sapply(slope_fin_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_rectum_fem_cond<-sapply(slope_fin_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_rectum_mal_cond<-sapply(slope_nor_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_rectum_fem_cond<-sapply(slope_nor_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_rectum_mal_cond<-sapply(slope_swe_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_rectum_fem_cond<-sapply(slope_swe_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_rectum_mal_cond<-(slope_den_rectum_mal_cond[,-1] - slope_den_rectum_mal_cond[,-ncol(slope_den_rectum_mal_cond)])
+dede_den_rectum_mal_cond<-data.frame(dede_den_rectum_mal_cond)
+dede_den_rectum_fem_cond<-(slope_den_rectum_fem_cond[,-1] - slope_den_rectum_fem_cond[,-ncol(slope_den_rectum_fem_cond)])
+dede_den_rectum_fem_cond<-data.frame(dede_den_rectum_fem_cond)
+
+dede_fin_rectum_mal_cond<-(slope_fin_rectum_mal_cond[,-1] - slope_fin_rectum_mal_cond[,-ncol(slope_fin_rectum_mal_cond)])
+dede_fin_rectum_mal_cond<-data.frame(dede_fin_rectum_mal_cond)
+dede_fin_rectum_fem_cond<-(slope_fin_rectum_fem_cond[,-1] - slope_fin_rectum_fem_cond[,-ncol(slope_fin_rectum_fem_cond)])
+dede_fin_rectum_fem_cond<-data.frame(dede_fin_rectum_fem_cond)
+
+dede_nor_rectum_mal_cond<-(slope_nor_rectum_mal_cond[,-1] - slope_nor_rectum_mal_cond[,-ncol(slope_nor_rectum_mal_cond)])
+dede_nor_rectum_mal_cond<-data.frame(dede_nor_rectum_mal_cond)
+dede_nor_rectum_fem_cond<-(slope_nor_rectum_fem_cond[,-1] - slope_nor_rectum_fem_cond[,-ncol(slope_nor_rectum_fem_cond)])
+dede_nor_rectum_fem_cond<-data.frame(dede_nor_rectum_fem_cond)
+
+dede_swe_rectum_mal_cond<-(slope_swe_rectum_mal_cond[,-1] - slope_swe_rectum_mal_cond[,-ncol(slope_swe_rectum_mal_cond)])
+dede_swe_rectum_mal_cond<-data.frame(dede_swe_rectum_mal_cond)
+dede_swe_rectum_fem_cond<-(slope_swe_rectum_fem_cond[,-1] - slope_swe_rectum_fem_cond[,-ncol(slope_swe_rectum_fem_cond)])
+dede_swe_rectum_fem_cond<-data.frame(dede_swe_rectum_fem_cond)
+
+post_rectum_den_mal_cond<-data.frame(post_rectum_den_mal_cond)
+cis2_rectum_den_mal_cond<-sapply(post_rectum_den_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_den_mal_cond<-c(cis2_rectum_den_mal_cond[1,],rev(cis2_rectum_den_mal_cond[2,]))
+
+post_rectum_fin_mal_cond<-data.frame(post_rectum_fin_mal_cond)
+cis2_rectum_fin_mal_cond<-sapply(post_rectum_fin_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_fin_mal_cond<-c(cis2_rectum_fin_mal_cond[1,],rev(cis2_rectum_fin_mal_cond[2,]))
+
+post_rectum_nor_mal_cond<-data.frame(post_rectum_nor_mal_cond)
+cis2_rectum_nor_mal_cond<-sapply(post_rectum_nor_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_nor_mal_cond<-c(cis2_rectum_nor_mal_cond[1,],rev(cis2_rectum_nor_mal_cond[2,]))
+
+post_rectum_swe_mal_cond<-data.frame(post_rectum_swe_mal_cond)
+cis2_rectum_swe_mal_cond<-sapply(post_rectum_swe_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_swe_mal_cond<-c(cis2_rectum_swe_mal_cond[1,],rev(cis2_rectum_swe_mal_cond[2,]))
+
+post_rectum_den_fem_cond<-data.frame(post_rectum_den_fem_cond)
+cis2_rectum_den_fem_cond<-sapply(post_rectum_den_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_den_fem_cond<-c(cis2_rectum_den_fem_cond[1,],rev(cis2_rectum_den_fem_cond[2,]))
+
+post_rectum_fin_fem_cond<-data.frame(post_rectum_fin_fem_cond)
+cis2_rectum_fin_fem_cond<-sapply(post_rectum_fin_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_fin_fem_cond<-c(cis2_rectum_fin_fem_cond[1,],rev(cis2_rectum_fin_fem_cond[2,]))
+
+post_rectum_nor_fem_cond<-data.frame(post_rectum_nor_fem_cond)
+cis2_rectum_nor_fem_cond<-sapply(post_rectum_nor_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_nor_fem_cond<-c(cis2_rectum_nor_fem_cond[1,],rev(cis2_rectum_nor_fem_cond[2,]))
+
+post_rectum_swe_fem_cond<-data.frame(post_rectum_swe_fem_cond)
+cis2_rectum_swe_fem_cond<-sapply(post_rectum_swe_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_rectum_swe_fem_cond<-c(cis2_rectum_swe_fem_cond[1,],rev(cis2_rectum_swe_fem_cond[2,]))
+
+cis3_den_rectum_mal_cond<-sapply(dede_den_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_rectum_fem_cond<-sapply(dede_den_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_rectum_mal_cond<-sapply(dede_fin_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_rectum_fem_cond<-sapply(dede_fin_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_rectum_mal_cond<-sapply(dede_nor_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_rectum_fem_cond<-sapply(dede_nor_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_rectum_mal_cond<-sapply(dede_swe_rectum_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_rectum_fem_cond<-sapply(dede_swe_rectum_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+## small_intestine cancer ------------------------------------------------------------
+
+### 1y ----------------------------------------------------------------------
+slope_den_small_intestine_mal_1y<-(post_small_intestine_den_mal_1y[,-1] - post_small_intestine_den_mal_1y[,-ncol(post_small_intestine_den_mal_1y)])*10
+slope_den_small_intestine_mal_1y<-data.frame(slope_den_small_intestine_mal_1y)
+slope_den_small_intestine_fem_1y<-(post_small_intestine_den_fem_1y[,-1] - post_small_intestine_den_fem_1y[,-ncol(post_small_intestine_den_fem_1y)])*10
+slope_den_small_intestine_fem_1y<-data.frame(slope_den_small_intestine_fem_1y)
+
+slope_fin_small_intestine_mal_1y<-(post_small_intestine_fin_mal_1y[,-1] - post_small_intestine_fin_mal_1y[,-ncol(post_small_intestine_fin_mal_1y)])*10
+slope_fin_small_intestine_mal_1y<-data.frame(slope_fin_small_intestine_mal_1y)
+slope_fin_small_intestine_fem_1y<-(post_small_intestine_fin_fem_1y[,-1] - post_small_intestine_fin_fem_1y[,-ncol(post_small_intestine_fin_fem_1y)])*10
+slope_fin_small_intestine_fem_1y<-data.frame(slope_fin_small_intestine_fem_1y)
+
+slope_nor_small_intestine_mal_1y<-(post_small_intestine_nor_mal_1y[,-1] - post_small_intestine_nor_mal_1y[,-ncol(post_small_intestine_nor_mal_1y)])*10
+slope_nor_small_intestine_mal_1y<-data.frame(slope_nor_small_intestine_mal_1y)
+slope_nor_small_intestine_fem_1y<-(post_small_intestine_nor_fem_1y[,-1] - post_small_intestine_nor_fem_1y[,-ncol(post_small_intestine_nor_fem_1y)])*10
+slope_nor_small_intestine_fem_1y<-data.frame(slope_nor_small_intestine_fem_1y)
+
+slope_swe_small_intestine_mal_1y<-(post_small_intestine_swe_mal_1y[,-1] - post_small_intestine_swe_mal_1y[,-ncol(post_small_intestine_swe_mal_1y)])*10
+slope_swe_small_intestine_mal_1y<-data.frame(slope_swe_small_intestine_mal_1y)
+slope_swe_small_intestine_fem_1y<-(post_small_intestine_swe_fem_1y[,-1] - post_small_intestine_swe_fem_1y[,-ncol(post_small_intestine_swe_fem_1y)])*10
+slope_swe_small_intestine_fem_1y<-data.frame(slope_swe_small_intestine_fem_1y)
+
+cis_den_small_intestine_mal_1y<-sapply(slope_den_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_small_intestine_fem_1y<-sapply(slope_den_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_small_intestine_mal_1y<-sapply(slope_fin_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_small_intestine_fem_1y<-sapply(slope_fin_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_small_intestine_mal_1y<-sapply(slope_nor_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_small_intestine_fem_1y<-sapply(slope_nor_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_small_intestine_mal_1y<-sapply(slope_swe_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_small_intestine_fem_1y<-sapply(slope_swe_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_small_intestine_mal_1y<-(slope_den_small_intestine_mal_1y[,-1] - slope_den_small_intestine_mal_1y[,-ncol(slope_den_small_intestine_mal_1y)])
+dede_den_small_intestine_mal_1y<-data.frame(dede_den_small_intestine_mal_1y)
+dede_den_small_intestine_fem_1y<-(slope_den_small_intestine_fem_1y[,-1] - slope_den_small_intestine_fem_1y[,-ncol(slope_den_small_intestine_fem_1y)])
+dede_den_small_intestine_fem_1y<-data.frame(dede_den_small_intestine_fem_1y)
+
+dede_fin_small_intestine_mal_1y<-(slope_fin_small_intestine_mal_1y[,-1] - slope_fin_small_intestine_mal_1y[,-ncol(slope_fin_small_intestine_mal_1y)])
+dede_fin_small_intestine_mal_1y<-data.frame(dede_fin_small_intestine_mal_1y)
+dede_fin_small_intestine_fem_1y<-(slope_fin_small_intestine_fem_1y[,-1] - slope_fin_small_intestine_fem_1y[,-ncol(slope_fin_small_intestine_fem_1y)])
+dede_fin_small_intestine_fem_1y<-data.frame(dede_fin_small_intestine_fem_1y)
+
+dede_nor_small_intestine_mal_1y<-(slope_nor_small_intestine_mal_1y[,-1] - slope_nor_small_intestine_mal_1y[,-ncol(slope_nor_small_intestine_mal_1y)])
+dede_nor_small_intestine_mal_1y<-data.frame(dede_nor_small_intestine_mal_1y)
+dede_nor_small_intestine_fem_1y<-(slope_nor_small_intestine_fem_1y[,-1] - slope_nor_small_intestine_fem_1y[,-ncol(slope_nor_small_intestine_fem_1y)])
+dede_nor_small_intestine_fem_1y<-data.frame(dede_nor_small_intestine_fem_1y)
+
+dede_swe_small_intestine_mal_1y<-(slope_swe_small_intestine_mal_1y[,-1] - slope_swe_small_intestine_mal_1y[,-ncol(slope_swe_small_intestine_mal_1y)])
+dede_swe_small_intestine_mal_1y<-data.frame(dede_swe_small_intestine_mal_1y)
+dede_swe_small_intestine_fem_1y<-(slope_swe_small_intestine_fem_1y[,-1] - slope_swe_small_intestine_fem_1y[,-ncol(slope_swe_small_intestine_fem_1y)])
+dede_swe_small_intestine_fem_1y<-data.frame(dede_swe_small_intestine_fem_1y)
+
+post_small_intestine_den_mal_1y<-data.frame(post_small_intestine_den_mal_1y)
+cis2_small_intestine_den_mal_1y<-sapply(post_small_intestine_den_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_den_mal_1y<-c(cis2_small_intestine_den_mal_1y[1,],rev(cis2_small_intestine_den_mal_1y[2,]))
+
+post_small_intestine_fin_mal_1y<-data.frame(post_small_intestine_fin_mal_1y)
+cis2_small_intestine_fin_mal_1y<-sapply(post_small_intestine_fin_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_fin_mal_1y<-c(cis2_small_intestine_fin_mal_1y[1,],rev(cis2_small_intestine_fin_mal_1y[2,]))
+
+post_small_intestine_nor_mal_1y<-data.frame(post_small_intestine_nor_mal_1y)
+cis2_small_intestine_nor_mal_1y<-sapply(post_small_intestine_nor_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_nor_mal_1y<-c(cis2_small_intestine_nor_mal_1y[1,],rev(cis2_small_intestine_nor_mal_1y[2,]))
+
+post_small_intestine_swe_mal_1y<-data.frame(post_small_intestine_swe_mal_1y)
+cis2_small_intestine_swe_mal_1y<-sapply(post_small_intestine_swe_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_swe_mal_1y<-c(cis2_small_intestine_swe_mal_1y[1,],rev(cis2_small_intestine_swe_mal_1y[2,]))
+
+post_small_intestine_den_fem_1y<-data.frame(post_small_intestine_den_fem_1y)
+cis2_small_intestine_den_fem_1y<-sapply(post_small_intestine_den_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_den_fem_1y<-c(cis2_small_intestine_den_fem_1y[1,],rev(cis2_small_intestine_den_fem_1y[2,]))
+
+post_small_intestine_fin_fem_1y<-data.frame(post_small_intestine_fin_fem_1y)
+cis2_small_intestine_fin_fem_1y<-sapply(post_small_intestine_fin_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_fin_fem_1y<-c(cis2_small_intestine_fin_fem_1y[1,],rev(cis2_small_intestine_fin_fem_1y[2,]))
+
+post_small_intestine_nor_fem_1y<-data.frame(post_small_intestine_nor_fem_1y)
+cis2_small_intestine_nor_fem_1y<-sapply(post_small_intestine_nor_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_nor_fem_1y<-c(cis2_small_intestine_nor_fem_1y[1,],rev(cis2_small_intestine_nor_fem_1y[2,]))
+
+post_small_intestine_swe_fem_1y<-data.frame(post_small_intestine_swe_fem_1y)
+cis2_small_intestine_swe_fem_1y<-sapply(post_small_intestine_swe_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_swe_fem_1y<-c(cis2_small_intestine_swe_fem_1y[1,],rev(cis2_small_intestine_swe_fem_1y[2,]))
+
+cis3_den_small_intestine_mal_1y<-sapply(dede_den_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_small_intestine_fem_1y<-sapply(dede_den_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_small_intestine_mal_1y<-sapply(dede_fin_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_small_intestine_fem_1y<-sapply(dede_fin_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_small_intestine_mal_1y<-sapply(dede_nor_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_small_intestine_fem_1y<-sapply(dede_nor_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_small_intestine_mal_1y<-sapply(dede_swe_small_intestine_mal_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_small_intestine_fem_1y<-sapply(dede_swe_small_intestine_fem_1y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+### 5y ----------------------------------------------------------------------
+
+slope_den_small_intestine_mal_5y<-(post_small_intestine_den_mal_5y[,-1] - post_small_intestine_den_mal_5y[,-ncol(post_small_intestine_den_mal_5y)])*10
+slope_den_small_intestine_mal_5y<-data.frame(slope_den_small_intestine_mal_5y)
+slope_den_small_intestine_fem_5y<-(post_small_intestine_den_fem_5y[,-1] - post_small_intestine_den_fem_5y[,-ncol(post_small_intestine_den_fem_5y)])*10
+slope_den_small_intestine_fem_5y<-data.frame(slope_den_small_intestine_fem_5y)
+
+slope_fin_small_intestine_mal_5y<-(post_small_intestine_fin_mal_5y[,-1] - post_small_intestine_fin_mal_5y[,-ncol(post_small_intestine_fin_mal_5y)])*10
+slope_fin_small_intestine_mal_5y<-data.frame(slope_fin_small_intestine_mal_5y)
+slope_fin_small_intestine_fem_5y<-(post_small_intestine_fin_fem_5y[,-1] - post_small_intestine_fin_fem_5y[,-ncol(post_small_intestine_fin_fem_5y)])*10
+slope_fin_small_intestine_fem_5y<-data.frame(slope_fin_small_intestine_fem_5y)
+
+slope_nor_small_intestine_mal_5y<-(post_small_intestine_nor_mal_5y[,-1] - post_small_intestine_nor_mal_5y[,-ncol(post_small_intestine_nor_mal_5y)])*10
+slope_nor_small_intestine_mal_5y<-data.frame(slope_nor_small_intestine_mal_5y)
+slope_nor_small_intestine_fem_5y<-(post_small_intestine_nor_fem_5y[,-1] - post_small_intestine_nor_fem_5y[,-ncol(post_small_intestine_nor_fem_5y)])*10
+slope_nor_small_intestine_fem_5y<-data.frame(slope_nor_small_intestine_fem_5y)
+
+slope_swe_small_intestine_mal_5y<-(post_small_intestine_swe_mal_5y[,-1] - post_small_intestine_swe_mal_5y[,-ncol(post_small_intestine_swe_mal_5y)])*10
+slope_swe_small_intestine_mal_5y<-data.frame(slope_swe_small_intestine_mal_5y)
+slope_swe_small_intestine_fem_5y<-(post_small_intestine_swe_fem_5y[,-1] - post_small_intestine_swe_fem_5y[,-ncol(post_small_intestine_swe_fem_5y)])*10
+slope_swe_small_intestine_fem_5y<-data.frame(slope_swe_small_intestine_fem_5y)
+
+cis_den_small_intestine_mal_5y<-sapply(slope_den_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_small_intestine_fem_5y<-sapply(slope_den_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_small_intestine_mal_5y<-sapply(slope_fin_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_small_intestine_fem_5y<-sapply(slope_fin_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_small_intestine_mal_5y<-sapply(slope_nor_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_small_intestine_fem_5y<-sapply(slope_nor_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_small_intestine_mal_5y<-sapply(slope_swe_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_small_intestine_fem_5y<-sapply(slope_swe_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_small_intestine_mal_5y<-(slope_den_small_intestine_mal_5y[,-1] - slope_den_small_intestine_mal_5y[,-ncol(slope_den_small_intestine_mal_5y)])
+dede_den_small_intestine_mal_5y<-data.frame(dede_den_small_intestine_mal_5y)
+dede_den_small_intestine_fem_5y<-(slope_den_small_intestine_fem_5y[,-1] - slope_den_small_intestine_fem_5y[,-ncol(slope_den_small_intestine_fem_5y)])
+dede_den_small_intestine_fem_5y<-data.frame(dede_den_small_intestine_fem_5y)
+
+dede_fin_small_intestine_mal_5y<-(slope_fin_small_intestine_mal_5y[,-1] - slope_fin_small_intestine_mal_5y[,-ncol(slope_fin_small_intestine_mal_5y)])
+dede_fin_small_intestine_mal_5y<-data.frame(dede_fin_small_intestine_mal_5y)
+dede_fin_small_intestine_fem_5y<-(slope_fin_small_intestine_fem_5y[,-1] - slope_fin_small_intestine_fem_5y[,-ncol(slope_fin_small_intestine_fem_5y)])
+dede_fin_small_intestine_fem_5y<-data.frame(dede_fin_small_intestine_fem_5y)
+
+dede_nor_small_intestine_mal_5y<-(slope_nor_small_intestine_mal_5y[,-1] - slope_nor_small_intestine_mal_5y[,-ncol(slope_nor_small_intestine_mal_5y)])
+dede_nor_small_intestine_mal_5y<-data.frame(dede_nor_small_intestine_mal_5y)
+dede_nor_small_intestine_fem_5y<-(slope_nor_small_intestine_fem_5y[,-1] - slope_nor_small_intestine_fem_5y[,-ncol(slope_nor_small_intestine_fem_5y)])
+dede_nor_small_intestine_fem_5y<-data.frame(dede_nor_small_intestine_fem_5y)
+
+dede_swe_small_intestine_mal_5y<-(slope_swe_small_intestine_mal_5y[,-1] - slope_swe_small_intestine_mal_5y[,-ncol(slope_swe_small_intestine_mal_5y)])
+dede_swe_small_intestine_mal_5y<-data.frame(dede_swe_small_intestine_mal_5y)
+dede_swe_small_intestine_fem_5y<-(slope_swe_small_intestine_fem_5y[,-1] - slope_swe_small_intestine_fem_5y[,-ncol(slope_swe_small_intestine_fem_5y)])
+dede_swe_small_intestine_fem_5y<-data.frame(dede_swe_small_intestine_fem_5y)
+
+post_small_intestine_den_mal_5y<-data.frame(post_small_intestine_den_mal_5y)
+cis2_small_intestine_den_mal_5y<-sapply(post_small_intestine_den_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_den_mal_5y<-c(cis2_small_intestine_den_mal_5y[1,],rev(cis2_small_intestine_den_mal_5y[2,]))
+
+post_small_intestine_fin_mal_5y<-data.frame(post_small_intestine_fin_mal_5y)
+cis2_small_intestine_fin_mal_5y<-sapply(post_small_intestine_fin_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_fin_mal_5y<-c(cis2_small_intestine_fin_mal_5y[1,],rev(cis2_small_intestine_fin_mal_5y[2,]))
+
+post_small_intestine_nor_mal_5y<-data.frame(post_small_intestine_nor_mal_5y)
+cis2_small_intestine_nor_mal_5y<-sapply(post_small_intestine_nor_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_nor_mal_5y<-c(cis2_small_intestine_nor_mal_5y[1,],rev(cis2_small_intestine_nor_mal_5y[2,]))
+
+post_small_intestine_swe_mal_5y<-data.frame(post_small_intestine_swe_mal_5y)
+cis2_small_intestine_swe_mal_5y<-sapply(post_small_intestine_swe_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_swe_mal_5y<-c(cis2_small_intestine_swe_mal_5y[1,],rev(cis2_small_intestine_swe_mal_5y[2,]))
+
+post_small_intestine_den_fem_5y<-data.frame(post_small_intestine_den_fem_5y)
+cis2_small_intestine_den_fem_5y<-sapply(post_small_intestine_den_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_den_fem_5y<-c(cis2_small_intestine_den_fem_5y[1,],rev(cis2_small_intestine_den_fem_5y[2,]))
+
+post_small_intestine_fin_fem_5y<-data.frame(post_small_intestine_fin_fem_5y)
+cis2_small_intestine_fin_fem_5y<-sapply(post_small_intestine_fin_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_fin_fem_5y<-c(cis2_small_intestine_fin_fem_5y[1,],rev(cis2_small_intestine_fin_fem_5y[2,]))
+
+post_small_intestine_nor_fem_5y<-data.frame(post_small_intestine_nor_fem_5y)
+cis2_small_intestine_nor_fem_5y<-sapply(post_small_intestine_nor_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_nor_fem_5y<-c(cis2_small_intestine_nor_fem_5y[1,],rev(cis2_small_intestine_nor_fem_5y[2,]))
+
+post_small_intestine_swe_fem_5y<-data.frame(post_small_intestine_swe_fem_5y)
+cis2_small_intestine_swe_fem_5y<-sapply(post_small_intestine_swe_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_swe_fem_5y<-c(cis2_small_intestine_swe_fem_5y[1,],rev(cis2_small_intestine_swe_fem_5y[2,]))
+
+cis3_den_small_intestine_mal_5y<-sapply(dede_den_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_small_intestine_fem_5y<-sapply(dede_den_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_small_intestine_mal_5y<-sapply(dede_fin_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_small_intestine_fem_5y<-sapply(dede_fin_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_small_intestine_mal_5y<-sapply(dede_nor_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_small_intestine_fem_5y<-sapply(dede_nor_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_small_intestine_mal_5y<-sapply(dede_swe_small_intestine_mal_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_small_intestine_fem_5y<-sapply(dede_swe_small_intestine_fem_5y, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+
+### cond --------------------------------------------------------------------
+slope_den_small_intestine_mal_cond<-(post_small_intestine_den_mal_cond[,-1] - post_small_intestine_den_mal_cond[,-ncol(post_small_intestine_den_mal_cond)])*10
+slope_den_small_intestine_mal_cond<-data.frame(slope_den_small_intestine_mal_cond)
+slope_den_small_intestine_fem_cond<-(post_small_intestine_den_fem_cond[,-1] - post_small_intestine_den_fem_cond[,-ncol(post_small_intestine_den_fem_cond)])*10
+slope_den_small_intestine_fem_cond<-data.frame(slope_den_small_intestine_fem_cond)
+
+slope_fin_small_intestine_mal_cond<-(post_small_intestine_fin_mal_cond[,-1] - post_small_intestine_fin_mal_cond[,-ncol(post_small_intestine_fin_mal_cond)])*10
+slope_fin_small_intestine_mal_cond<-data.frame(slope_fin_small_intestine_mal_cond)
+slope_fin_small_intestine_fem_cond<-(post_small_intestine_fin_fem_cond[,-1] - post_small_intestine_fin_fem_cond[,-ncol(post_small_intestine_fin_fem_cond)])*10
+slope_fin_small_intestine_fem_cond<-data.frame(slope_fin_small_intestine_fem_cond)
+
+slope_nor_small_intestine_mal_cond<-(post_small_intestine_nor_mal_cond[,-1] - post_small_intestine_nor_mal_cond[,-ncol(post_small_intestine_nor_mal_cond)])*10
+slope_nor_small_intestine_mal_cond<-data.frame(slope_nor_small_intestine_mal_cond)
+slope_nor_small_intestine_fem_cond<-(post_small_intestine_nor_fem_cond[,-1] - post_small_intestine_nor_fem_cond[,-ncol(post_small_intestine_nor_fem_cond)])*10
+slope_nor_small_intestine_fem_cond<-data.frame(slope_nor_small_intestine_fem_cond)
+
+slope_swe_small_intestine_mal_cond<-(post_small_intestine_swe_mal_cond[,-1] - post_small_intestine_swe_mal_cond[,-ncol(post_small_intestine_swe_mal_cond)])*10
+slope_swe_small_intestine_mal_cond<-data.frame(slope_swe_small_intestine_mal_cond)
+slope_swe_small_intestine_fem_cond<-(post_small_intestine_swe_fem_cond[,-1] - post_small_intestine_swe_fem_cond[,-ncol(post_small_intestine_swe_fem_cond)])*10
+slope_swe_small_intestine_fem_cond<-data.frame(slope_swe_small_intestine_fem_cond)
+
+cis_den_small_intestine_mal_cond<-sapply(slope_den_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_den_small_intestine_fem_cond<-sapply(slope_den_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_small_intestine_mal_cond<-sapply(slope_fin_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_fin_small_intestine_fem_cond<-sapply(slope_fin_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_small_intestine_mal_cond<-sapply(slope_nor_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_nor_small_intestine_fem_cond<-sapply(slope_nor_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_small_intestine_mal_cond<-sapply(slope_swe_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis_swe_small_intestine_fem_cond<-sapply(slope_swe_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+dede_den_small_intestine_mal_cond<-(slope_den_small_intestine_mal_cond[,-1] - slope_den_small_intestine_mal_cond[,-ncol(slope_den_small_intestine_mal_cond)])
+dede_den_small_intestine_mal_cond<-data.frame(dede_den_small_intestine_mal_cond)
+dede_den_small_intestine_fem_cond<-(slope_den_small_intestine_fem_cond[,-1] - slope_den_small_intestine_fem_cond[,-ncol(slope_den_small_intestine_fem_cond)])
+dede_den_small_intestine_fem_cond<-data.frame(dede_den_small_intestine_fem_cond)
+
+dede_fin_small_intestine_mal_cond<-(slope_fin_small_intestine_mal_cond[,-1] - slope_fin_small_intestine_mal_cond[,-ncol(slope_fin_small_intestine_mal_cond)])
+dede_fin_small_intestine_mal_cond<-data.frame(dede_fin_small_intestine_mal_cond)
+dede_fin_small_intestine_fem_cond<-(slope_fin_small_intestine_fem_cond[,-1] - slope_fin_small_intestine_fem_cond[,-ncol(slope_fin_small_intestine_fem_cond)])
+dede_fin_small_intestine_fem_cond<-data.frame(dede_fin_small_intestine_fem_cond)
+
+dede_nor_small_intestine_mal_cond<-(slope_nor_small_intestine_mal_cond[,-1] - slope_nor_small_intestine_mal_cond[,-ncol(slope_nor_small_intestine_mal_cond)])
+dede_nor_small_intestine_mal_cond<-data.frame(dede_nor_small_intestine_mal_cond)
+dede_nor_small_intestine_fem_cond<-(slope_nor_small_intestine_fem_cond[,-1] - slope_nor_small_intestine_fem_cond[,-ncol(slope_nor_small_intestine_fem_cond)])
+dede_nor_small_intestine_fem_cond<-data.frame(dede_nor_small_intestine_fem_cond)
+
+dede_swe_small_intestine_mal_cond<-(slope_swe_small_intestine_mal_cond[,-1] - slope_swe_small_intestine_mal_cond[,-ncol(slope_swe_small_intestine_mal_cond)])
+dede_swe_small_intestine_mal_cond<-data.frame(dede_swe_small_intestine_mal_cond)
+dede_swe_small_intestine_fem_cond<-(slope_swe_small_intestine_fem_cond[,-1] - slope_swe_small_intestine_fem_cond[,-ncol(slope_swe_small_intestine_fem_cond)])
+dede_swe_small_intestine_fem_cond<-data.frame(dede_swe_small_intestine_fem_cond)
+
+post_small_intestine_den_mal_cond<-data.frame(post_small_intestine_den_mal_cond)
+cis2_small_intestine_den_mal_cond<-sapply(post_small_intestine_den_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_den_mal_cond<-c(cis2_small_intestine_den_mal_cond[1,],rev(cis2_small_intestine_den_mal_cond[2,]))
+
+post_small_intestine_fin_mal_cond<-data.frame(post_small_intestine_fin_mal_cond)
+cis2_small_intestine_fin_mal_cond<-sapply(post_small_intestine_fin_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_fin_mal_cond<-c(cis2_small_intestine_fin_mal_cond[1,],rev(cis2_small_intestine_fin_mal_cond[2,]))
+
+post_small_intestine_nor_mal_cond<-data.frame(post_small_intestine_nor_mal_cond)
+cis2_small_intestine_nor_mal_cond<-sapply(post_small_intestine_nor_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_nor_mal_cond<-c(cis2_small_intestine_nor_mal_cond[1,],rev(cis2_small_intestine_nor_mal_cond[2,]))
+
+post_small_intestine_swe_mal_cond<-data.frame(post_small_intestine_swe_mal_cond)
+cis2_small_intestine_swe_mal_cond<-sapply(post_small_intestine_swe_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_swe_mal_cond<-c(cis2_small_intestine_swe_mal_cond[1,],rev(cis2_small_intestine_swe_mal_cond[2,]))
+
+post_small_intestine_den_fem_cond<-data.frame(post_small_intestine_den_fem_cond)
+cis2_small_intestine_den_fem_cond<-sapply(post_small_intestine_den_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_den_fem_cond<-c(cis2_small_intestine_den_fem_cond[1,],rev(cis2_small_intestine_den_fem_cond[2,]))
+
+post_small_intestine_fin_fem_cond<-data.frame(post_small_intestine_fin_fem_cond)
+cis2_small_intestine_fin_fem_cond<-sapply(post_small_intestine_fin_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_fin_fem_cond<-c(cis2_small_intestine_fin_fem_cond[1,],rev(cis2_small_intestine_fin_fem_cond[2,]))
+
+post_small_intestine_nor_fem_cond<-data.frame(post_small_intestine_nor_fem_cond)
+cis2_small_intestine_nor_fem_cond<-sapply(post_small_intestine_nor_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_nor_fem_cond<-c(cis2_small_intestine_nor_fem_cond[1,],rev(cis2_small_intestine_nor_fem_cond[2,]))
+
+post_small_intestine_swe_fem_cond<-data.frame(post_small_intestine_swe_fem_cond)
+cis2_small_intestine_swe_fem_cond<-sapply(post_small_intestine_swe_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis2_small_intestine_swe_fem_cond<-c(cis2_small_intestine_swe_fem_cond[1,],rev(cis2_small_intestine_swe_fem_cond[2,]))
+
+cis3_den_small_intestine_mal_cond<-sapply(dede_den_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_den_small_intestine_fem_cond<-sapply(dede_den_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_small_intestine_mal_cond<-sapply(dede_fin_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_fin_small_intestine_fem_cond<-sapply(dede_fin_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_small_intestine_mal_cond<-sapply(dede_nor_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_nor_small_intestine_fem_cond<-sapply(dede_nor_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_small_intestine_mal_cond<-sapply(dede_swe_small_intestine_mal_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+cis3_swe_small_intestine_fem_cond<-sapply(dede_swe_small_intestine_fem_cond, function(p) quantile(p, probs = c(0.025,0.975,0.5)))
+
+```
+
+## Visualisation
+
+### Colors
+
+```{r}
+cola<-c(
+  rgb(1,0,0,alpha=1),
+  rgb(0.2,0.2,1,alpha=1),
+  rgb(0, 0.9, 0,alpha=1),
+  rgb(0.7,0.7,0.1,alpha=1))
+
+colb<-c(
+  rgb(1,0,0,alpha=0.2),
+  rgb(0.2,0.2,1,alpha=0.2),
+  rgb(0, 0.9, 0,alpha=0.2),
+  rgb(0.7,0.7,0.1,alpha=0.2))
+
+colc<-c(
+  rgb(1,0,0,alpha=0.8),
+  rgb(0.2,0.2,1,alpha=0.8),
+  rgb(0, 0.9, 0,alpha=0.8),
+  rgb(0.7,0.7,0.1,alpha=0.8))
+```
+
+### Functions used for plotting
+\normalsize
+The 1st function, ***tabce2***, draws lines of predicted survival across the 50 years. 
+
+The line is **solid** if there is at least 95% plausibility for an increasing or decreasing trend (95% credible interval does not cross zero), in a duration of at least 5 years. 
+
+***tabce2*** uses 2 arguments:
+
+[1] *data* = bounds of 95% credible interval for **slope** (the 1st derivation) of a given survival measure over time. 
+
+[2] *dat2* = whole posterior distribution for a given survival measure over time (1971-2020 by 1/10 of year)
+
+It returns *data2*, i.e. a table with data where the trend in survival started to be, or stopped to be, at least 95% plausible
+
+\small
+```{r}
+# 1st function
+tabce2<-function(data,dat2){
+  data=data[1:2,]
+  cbinl<-c()
+  x=1
+  repeat{
+    cbinl[x]<-
+      if(data[1,x]>0|data[2,x]<0){cbinl[x]=1}else{cbinl[x]=0}
+    x<-x+1
+    if(x>length(data[1,])){break}}
+  cbin=1;x<-1
+  repeat{
+    cbin[x+1]<-abs(cbinl[x]-cbinl[x+1])
+    x=x+1
+    if(x>(length(cbinl)-1)){break}}
+  data<-data.frame(rbind(data,cbin));data[4,]<-yreal[c(2:500)]-0.049;data[5,]<-1:499
+  row.names(data)<-c("cil","ciu","stat_change","year","timepoint");data[3,499]<-1
+  data2=t(data[,data[3,]==1])
+  data2<-data.frame(data2)
+  tr<-data2;y=1
+  yreal=seq(1971,2020,length=500)
+  repeat{
+    if((((tr[y,1]<0)&(tr[y,2])<0))|(((tr[y,1]>0)&(tr[y,2])>0))&(tr[y+1,4]-tr[y,4])>5)
+    {lines(yreal[tr[y,5]:tr[y+1,5]],colMeans(dat2
+    )[tr[y,5]:tr[y+1,5]],lwd=1.6,col=cola[xx],lend=1)}
+    y<-y+1;if(y>dim(tr)[1]-1){break}}
+  lines(yreal[1:500],colMeans(dat2)
+        ,lwd=1,col=cola[xx],lty=2,lend=1)
+  return(data2)
+}
+```
+
+\normalsize
+The 2nd function, ***tabce3***, identifies ***breaking points***, i.e. detectable **changes** in survival trend (slope), with at least 95% plausibility. 
+
+It is calculated on the basis of a 95% credible interval for the 2nd derivation of a given survival measure. If the 2nd derivation is plausibly non-zero for at least 3 years, the function takes the peak in the 2nd derivation (within the identified time interval) as the *breaking point* (must be between the years 1976 and 2016)
+
+There are 2 arguments in *tabce3*:
+
+[1] *data* = bounds of 95% credible interval for the 2nd derivation of a given survival measure over time (time by 1/10 of year)
+
+[2] *arb* = enables shifting of the *breaking point* on x-axis if brekaing points for difference groups overlap. It is usually zero, or small non-zero number in case of overlap.
+
+The function prints:
+
+[1] *bp* = data (years) of *brekaing points*
+
+[2] *tr* = tables with data where change in survival trend (the 2nd derivation of survival) started to be, or stopped to be, at least 95% plausible (+ "edge" dates)
+
+The function often gives warning: *## Error in xy.coords(x, y): 'x' and 'y' lengths differ*. Warning occurs when there is no *breaking point* in a given group and survival measure, ie, it is not real error. 
+
+\small
+```{r}
+# 2nd function
+tabce3<-function(data,arb){
+  cbinl<-c()
+  x=1
+  repeat{
+    cbinl[x]<-
+      if(data[1,x]>0|data[2,x]<0){cbinl[x]=1}else{cbinl[x]=0}
+    x<-x+1
+    if(x>length(data[1,])){break}}
+  cbin=1;x<-1
+  repeat{
+    cbin[x+1]<-abs(cbinl[x]-cbinl[x+1])
+    x=x+1
+    if(x>(length(cbinl)-1)){break}}
+  data<-data.frame(rbind(data,cbin));data[5,]<-yreal[c(2:499)]-0.049
+  data[6,]<-1:498;data[4,51]<-1;data[4,449]<-1
+  
+  row.names(data)<-c("cil","ciu","est","stat_change","year","timepoint")
+  data2=t(data[,data[4,]==1])
+  data2<-data.frame(data2)
+  tr<-subset(data2,data2$timepoint>50&data2$timepoint<450)
+  y=1
+  bp<-c()
+  bx<-1
+  repeat{
+    if( (tr[y,1]<0) & (tr[y,2]<0) & (  (tr$year[y+1]-tr$year[y])>3   )  ) {
+      tr2<-data[,tr[y,6]:(tr[y+1,6]-2)]
+      bp[bx]<- tr2[,order(tr2[3,],decreasing=F)[1]][5]
+      bx=bx+1
+    }
+    if( (tr[y,1]>0) & (tr[y,2]>0) & (  (tr$year[y+1]-tr$year[y])>3   )) {
+      tr2<-data[,tr[y,6]:(tr[y+1,6]-2)]
+      bp[bx]<- tr2[,order(tr2[3,],decreasing=T)[1]][5]
+      bx=bx+1
+    }
+    y=y+1;if(y>(dim(tr)[1]-1)){break}}
+  y<-1;repeat{
+    lines(c(bp[y]+arb,bp[y]+arb),c(range[1],range[1]+0.025*scal),col=cola[xx],lwd=3.5,lend=1)
+    lines(c(bp[y]+arb,bp[y]+arb),c(range[2],range[2]-0.025*scal),col=cola[xx],lwd=3.5,lend=1)
+    lines(c(bp[y]+arb,bp[y]+arb),c(range[1],range[1]+0.999*scal),col=colc[xx],lwd=1,lend=1,lty=2)
+    y=y+1;if(y>length(bp)){break}}
+  print(bp)
+  print(tr)}
+```
+
+\normalsize
+The 3rd function, ***tabce4***, is mixture of previous functions (*tabce2* and *tabce3*). 
+Using *data* (bound of 95% credible intervals +median prediction for the 2nd derivation) and *dar2* (bound of 95% credible intervals + median prediction for the 1st derivation), it draws magnitude of change (slope) of the survival. 
+
+**solid** lines imply that there is a plausible trend (decreasing or increasing; plausibility of 95%) in the slope of the survival
+
+```{r}
+tabce4<-function(data,dar2){
+  dar2<-dar2[3,]
+  dar2[dar2<0]<-0
+  cbinl<-c()
+  x=1
+  repeat{
+    cbinl[x]<-
+      if(data[1,x]>0|data[2,x]<0){cbinl[x]=1}else{cbinl[x]=0}
+    x<-x+1
+    if(x>length(data[1,])){break}}
+  cbin=1;x<-1
+  repeat{
+    cbin[x+1]<-abs(cbinl[x]-cbinl[x+1])
+    x=x+1
+    if(x>(length(cbinl)-1)){break}}
+  data<-data.frame(rbind(data,cbin));data[5,]<-yreal[c(2:499)]-0.049;data[6,]<-1:498
+  row.names(data)<-c("cil","ciu","est","stat_change","year","timepoint")
+  data[4,450]<-1
+  data[4,50]<-1
+  data=data[,50:450]
+  lines(yreal[1:499],dar2,lwd=1,col=cola[xx],lty=2,lend=1)
+  data2=(t(data[,data[4,]==1]))
+  data2<-data.frame(data2)
+  tr<-data2;y=1
+  yreal=seq(1971,2020,length=498)
+  repeat{
+    if(((((tr[y,1]<0)&(tr[y,2])<0))|(((tr[y,1]>0)&(tr[y,2])>0)))&(tr[y+1,5]-tr[y,5])>3)
+    {lines(yreal[tr[y,6]:tr[y+1,6]],
+           dar2[tr[y,6]:tr[y+1,6]]
+           ,lwd=1.6,col=cola[xx],lend=1)}
+    y<-y+1;if(y>dim(tr)[1]-1){break}}
+  return(data2)}
+```
+
+### Fig. 1 - Denmark
+```{r,fig.height=6.9,fig.width=8,error=TRUE,warning=FALSE,results=FALSE,message=FALSE}
+m <- matrix(c(1,2,3
+              ,4,6,8
+              ,5,7,9), nrow = 3, ncol =3 ,byrow = TRUE)
+layout(mat = m,heights = c(0.06,1-0.06))
+par(mgp=c(1.6,0.8,0))
+par(mar=c(0,0,0,0))
+range<-c(0,100);scal<-range[2]-range[1]
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Colon cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Rectal cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Small intestine cancer",cex=1.6,font=3,xpd=TRUE)
+
+
+par(mgp=c(1.6,0.8,0))
+par(mar=c(2,2.5,0,2))
+
+### colon males % 
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+xx=1
+tabce3(cis3_den_colon_mal_1y,-0.6)
+xx=xx+1
+tabce3(cis3_den_colon_mal_cond,0)
+xx=xx+1
+tabce3(cis3_den_colon_mal_5y,0.6)
+xx=1
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+polygon(x,cis2_colon_den_mal_1y,border=NA,col=colb[xx],xpd=TRUE)
+xx=xx+1
+polygon(x,cis2_colon_den_mal_cond,border=NA,col=colb[xx],xpd=TRUE)
+xx=xx+1
+polygon(x,cis2_colon_den_mal_5y,border=NA,col=colb[xx],xpd=TRUE)
+
+xx=1
+points(colon[colon$group=="Denmark.Males",]$surv_1y~colon[colon$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Denmark.Males",]$surv_cond~colon[colon$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Denmark.Males",]$surv_5y~colon[colon$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_den_colon_mal_1y,post_colon_den_mal_1y);xx=xx+1
+tabce2(cis_den_colon_mal_cond,post_colon_den_mal_cond);xx=xx+1
+tabce2(cis_den_colon_mal_5y,post_colon_den_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.91
+xpo=-17
+rect(1996+xpo,yy+0.035*scal,2017.9+xpo,yy-0.15*scal,col="white",border="grey50",lwd=0.8)
+repeat{
+  points(2000+xpo,yy,pch=17,col=cola[xx],cex=1.2)
+  lines(c(1997+xpo,2003+xpo),c(yy,yy),lwd=1.6,col=cola[xx],lend=1)
+  xx<-xx+1;yy=yy-(scal*0.058);if(xx>3){break}}
+xx=1;yy=range[1]+scal*0.91
+text(2010+xpo,yy,"1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5/1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(1974,range[2]-0.05*scal,"a",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_den_colon_mal_1y[1,],rev(cis_den_colon_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_den_colon_mal_cond[1,],rev(cis_den_colon_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_den_colon_mal_5y[1,],rev(cis_den_colon_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_den_colon_mal_1y*20,cis_den_colon_mal_1y*20)
+xx=xx+1
+tabce4(cis3_den_colon_mal_cond*20,cis_den_colon_mal_cond*20)
+xx=xx+1
+tabce4(cis3_den_colon_mal_5y*20,cis_den_colon_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+### colon females %
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_den_colon_fem_1y,0)
+xx=xx+1
+tabce3(cis3_den_colon_fem_cond,0)
+xx=xx+1
+tabce3(cis3_den_colon_fem_5y,0)
+
+xx=1
+polygon(x,cis2_colon_den_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_den_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_den_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(colon[colon$group=="Denmark.Females",]$surv_1y~colon[colon$group=="Denmark.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Denmark.Females",]$surv_cond~colon[colon$group=="Denmark.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Denmark.Females",]$surv_5y~colon[colon$group=="Denmark.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_den_colon_fem_1y,post_colon_den_fem_1y);xx=xx+1
+tabce2(cis_den_colon_fem_cond,post_colon_den_fem_cond);xx=xx+1
+tabce2(cis_den_colon_fem_5y,post_colon_den_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.91
+xpo=-17
+text(1974,range[2]-0.05*scal,"d",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_den_colon_fem_1y[1,],rev(cis_den_colon_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_den_colon_fem_cond[1,],rev(cis_den_colon_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_den_colon_fem_5y[1,],rev(cis_den_colon_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_den_colon_fem_1y*20,cis_den_colon_fem_1y*20)
+xx=xx+1
+tabce4(cis3_den_colon_fem_cond*20,cis_den_colon_fem_cond*20)
+xx=xx+1
+tabce4(cis3_den_colon_fem_5y*20,cis_den_colon_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### rectum males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_den_rectum_mal_1y,0)
+xx=xx+1
+tabce3(cis3_den_rectum_mal_cond,-1)
+xx=xx+1
+tabce3(cis3_den_rectum_mal_5y,1)
+
+xx=1
+polygon(x,cis2_rectum_den_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_den_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_den_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Denmark.Males",]$surv_1y~rectum[rectum$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Denmark.Males",]$surv_cond~rectum[rectum$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Denmark.Males",]$surv_5y~rectum[rectum$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_den_rectum_mal_1y,post_rectum_den_mal_1y);xx=xx+1
+tabce2(cis_den_rectum_mal_cond,post_rectum_den_mal_cond);xx=xx+1
+tabce2(cis_den_rectum_mal_5y,post_rectum_den_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"b",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_den_rectum_mal_1y[1,],rev(cis_den_rectum_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_den_rectum_mal_cond[1,],rev(cis_den_rectum_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_den_rectum_mal_5y[1,],rev(cis_den_rectum_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_den_rectum_mal_1y*20,cis_den_rectum_mal_1y*20)
+xx=xx+1
+tabce4(cis3_den_rectum_mal_cond*20,cis_den_rectum_mal_cond*20)
+xx=xx+1
+tabce4(cis3_den_rectum_mal_5y*20,cis_den_rectum_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+### rectum females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_den_rectum_fem_1y,0)
+xx=xx+1
+tabce3(cis3_den_rectum_fem_cond,-0.6)
+xx=xx+1
+tabce3(cis3_den_rectum_fem_5y,0.6)
+
+xx=1
+polygon(x,cis2_rectum_den_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_den_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_den_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Denmark.Females",]$surv_1y~rectum[rectum$group=="Denmark.Females",]$year ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Denmark.Females",]$surv_cond~rectum[rectum$group=="Denmark.Females",]$year,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Denmark.Females",]$surv_5y~rectum[rectum$group=="Denmark.Females",]$year,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_den_rectum_fem_1y,post_rectum_den_fem_1y);xx=xx+1
+tabce2(cis_den_rectum_fem_cond,post_rectum_den_fem_cond);xx=xx+1
+tabce2(cis_den_rectum_fem_5y,post_rectum_den_fem_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"e",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_den_rectum_fem_1y[1,],rev(cis_den_rectum_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_den_rectum_fem_cond[1,],rev(cis_den_rectum_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_den_rectum_fem_5y[1,],rev(cis_den_rectum_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_den_rectum_fem_1y*20,cis_den_rectum_fem_1y*20)
+xx=xx+1
+tabce4(cis3_den_rectum_fem_cond*20,cis_den_rectum_fem_cond*20)
+xx=xx+1
+tabce4(cis3_den_rectum_fem_5y*20,cis_den_rectum_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### small_intestine males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_den_small_intestine_mal_1y,0)
+xx=xx+1
+tabce3(cis3_den_small_intestine_mal_cond,-0.6)
+xx=xx+1
+tabce3(cis3_den_small_intestine_mal_5y,0.6)
+
+xx=1
+polygon(x,cis2_small_intestine_den_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_den_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_den_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Denmark.Males",]$surv_1y~small_intestine[small_intestine$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Denmark.Males",]$surv_cond~small_intestine[small_intestine$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Denmark.Males",]$surv_5y~small_intestine[small_intestine$group=="Denmark.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_den_small_intestine_mal_1y,post_small_intestine_den_mal_1y);xx=xx+1
+tabce2(cis_den_small_intestine_mal_cond,post_small_intestine_den_mal_cond);xx=xx+1
+tabce2(cis_den_small_intestine_mal_5y,post_small_intestine_den_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974,range[2]-0.05*scal,"c",cex=2.2)
+
+ypo=-78
+xfl=48
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="red2",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="white",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="white",border=NA)
+
+
+### small_intestine females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_den_small_intestine_fem_1y,0)
+xx=xx+1
+tabce3(cis3_den_small_intestine_fem_cond,-0.6)
+xx=xx+1
+tabce3(cis3_den_small_intestine_fem_5y,0.6)
+
+
+xx=1
+polygon(x,cis2_small_intestine_den_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_den_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_den_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Denmark.Females",]$surv_1y~small_intestine[small_intestine$group=="Denmark.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Denmark.Females",]$surv_cond~small_intestine[small_intestine$group=="Denmark.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Denmark.Females",]$surv_5y~small_intestine[small_intestine$group=="Denmark.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_den_small_intestine_fem_1y,post_small_intestine_den_fem_1y);xx=xx+1
+tabce2(cis_den_small_intestine_fem_cond,post_small_intestine_den_fem_cond);xx=xx+1
+tabce2(cis_den_small_intestine_fem_5y,post_small_intestine_den_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974,range[2]-0.05*scal,"f",cex=2.2)
+```
+
+### Fig. 2 - Finland
+```{r,fig.height=6.9,fig.width=8,error=TRUE,warning=FALSE,results=FALSE,message=FALSE}
+## FIN figures -----------------
+m <- matrix(c(1,2,3
+              ,4,6,8
+              ,5,7,9), nrow = 3, ncol =3 ,byrow = TRUE)
+layout(mat = m,heights = c(0.06,1-0.06))
+par(mgp=c(1.6,0.8,0))
+par(mar=c(0,0,0,0))
+range<-c(0,100);scal<-range[2]-range[1]
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Colon cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Rectal cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Small intestine cancer",cex=1.6,font=3,xpd=TRUE)
+
+
+par(mgp=c(1.6,0.8,0))
+par(mar=c(2,2.5,0,2))
+
+### colon males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_fin_colon_mal_1y,0)
+xx=xx+1
+tabce3(cis3_fin_colon_mal_cond,-0.6)
+xx=xx+1
+tabce3(cis3_fin_colon_mal_5y,0.6)
+
+
+xx=1
+polygon(x,cis2_colon_fin_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_fin_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_fin_mal_5y,border=NA,col=colb[xx],xpd=TRUE)
+
+xx=1
+points(colon[colon$group=="Finland.Males",]$surv_1y~colon[colon$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Finland.Males",]$surv_cond~colon[colon$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Finland.Males",]$surv_5y~colon[colon$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_fin_colon_mal_1y,post_colon_fin_mal_1y);xx=xx+1
+tabce2(cis_fin_colon_mal_cond,post_colon_fin_mal_cond);xx=xx+1
+tabce2(cis_fin_colon_mal_5y,post_colon_fin_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.37
+xpo=-1
+rect(1996+xpo,yy+0.035*scal,2017.9+xpo,yy-0.15*scal,col="white",border="grey50",lwd=0.8)
+repeat{
+  points(2000+xpo,yy,pch=17,col=cola[xx],cex=1.2)
+  lines(c(1997+xpo,2003+xpo),c(yy,yy),lwd=1.6,col=cola[xx],lend=1)
+  xx<-xx+1;yy=yy-(scal*0.058);if(xx>3){break}}
+xx=1;yy=range[1]+scal*0.37
+text(2010+xpo,yy,"1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5/1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(1974,range[2]-0.05*scal,"a",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_fin_colon_mal_1y[1,],rev(cis_fin_colon_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_fin_colon_mal_cond[1,],rev(cis_fin_colon_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_fin_colon_mal_5y[1,],rev(cis_fin_colon_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_fin_colon_mal_1y*20,cis_fin_colon_mal_1y*20)
+xx=xx+1
+tabce4(cis3_fin_colon_mal_cond*20,cis_fin_colon_mal_cond*20)
+xx=xx+1
+tabce4(cis3_fin_colon_mal_5y*20,cis_fin_colon_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+### colon females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_fin_colon_fem_1y,0)
+xx=xx+1
+tabce3(cis3_fin_colon_fem_cond,0)
+xx=xx+1
+tabce3(cis3_fin_colon_fem_5y,0)
+
+xx=1
+polygon(x,cis2_colon_fin_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_fin_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_fin_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(colon[colon$group=="Finland.Females",]$surv_1y~colon[colon$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Finland.Females",]$surv_cond~colon[colon$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Finland.Females",]$surv_5y~colon[colon$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_fin_colon_fem_1y,post_colon_fin_fem_1y);xx=xx+1
+tabce2(cis_fin_colon_fem_cond,post_colon_fin_fem_cond);xx=xx+1
+tabce2(cis_fin_colon_fem_5y,post_colon_fin_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.91
+xpo=-17
+text(1974,range[2]-0.05*scal,"d",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_fin_colon_fem_1y[1,],rev(cis_fin_colon_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_fin_colon_fem_cond[1,],rev(cis_fin_colon_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_fin_colon_fem_5y[1,],rev(cis_fin_colon_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_fin_colon_fem_1y*20,cis_fin_colon_fem_1y*20)
+xx=xx+1
+tabce4(cis3_fin_colon_fem_cond*20,cis_fin_colon_fem_cond*20)
+xx=xx+1
+tabce4(cis3_fin_colon_fem_5y*20,cis_fin_colon_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### rectum males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_fin_rectum_mal_1y,0)
+xx=xx+1
+tabce3(cis3_fin_rectum_mal_cond,+0.2)
+xx=xx+1
+tabce3(cis3_fin_rectum_mal_5y,-0.8)
+
+xx=1
+polygon(x,cis2_rectum_fin_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_fin_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_fin_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Finland.Males",]$surv_1y~rectum[rectum$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Finland.Males",]$surv_cond~rectum[rectum$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Finland.Males",]$surv_5y~rectum[rectum$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_fin_rectum_mal_1y,post_rectum_fin_mal_1y);xx=xx+1
+tabce2(cis_fin_rectum_mal_cond,post_rectum_fin_mal_cond);xx=xx+1
+tabce2(cis_fin_rectum_mal_5y,post_rectum_fin_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"b",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_fin_rectum_mal_1y[1,],rev(cis_fin_rectum_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_fin_rectum_mal_cond[1,],rev(cis_fin_rectum_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_fin_rectum_mal_5y[1,],rev(cis_fin_rectum_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_fin_rectum_mal_1y*20,cis_fin_rectum_mal_1y*20)
+xx=xx+1
+tabce4(cis3_fin_rectum_mal_cond*20,cis_fin_rectum_mal_cond*20)
+xx=xx+1
+tabce4(cis3_fin_rectum_mal_5y*20,cis_fin_rectum_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### rectum females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_fin_rectum_fem_1y,0)
+xx=xx+1
+tabce3(cis3_fin_rectum_fem_cond,0)
+xx=xx+1
+tabce3(cis3_fin_rectum_fem_5y,0)
+xx=1
+polygon(x,cis2_rectum_fin_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_fin_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_fin_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Finland.Females",]$surv_1y~rectum[rectum$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Finland.Females",]$surv_cond~rectum[rectum$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Finland.Females",]$surv_5y~rectum[rectum$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_fin_rectum_fem_1y,post_rectum_fin_fem_1y);xx=xx+1
+tabce2(cis_fin_rectum_fem_cond,post_rectum_fin_fem_cond);xx=xx+1
+tabce2(cis_fin_rectum_fem_5y,post_rectum_fin_fem_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"e",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_fin_rectum_fem_1y[1,],rev(cis_fin_rectum_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_fin_rectum_fem_cond[1,],rev(cis_fin_rectum_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_fin_rectum_fem_5y[1,],rev(cis_fin_rectum_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_fin_rectum_fem_1y*20,cis_fin_rectum_fem_1y*20)
+xx=xx+1
+tabce4(cis3_fin_rectum_fem_cond*20,cis_fin_rectum_fem_cond*20)
+xx=xx+1
+tabce4(cis3_fin_rectum_fem_5y*20,cis_fin_rectum_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### small_intestine males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_fin_small_intestine_mal_1y,0)
+xx=xx+1
+tabce3(cis3_fin_small_intestine_mal_cond,0)
+xx=xx+1
+tabce3(cis3_fin_small_intestine_mal_5y,0)
+
+xx=1
+polygon(x,cis2_small_intestine_fin_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_fin_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_fin_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Finland.Males",]$surv_1y~small_intestine[small_intestine$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Finland.Males",]$surv_cond~small_intestine[small_intestine$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Finland.Males",]$surv_5y~small_intestine[small_intestine$group=="Finland.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_fin_small_intestine_mal_1y,post_small_intestine_fin_mal_1y);xx=xx+1
+tabce2(cis_fin_small_intestine_mal_cond,post_small_intestine_fin_mal_cond);xx=xx+1
+tabce2(cis_fin_small_intestine_mal_5y,post_small_intestine_fin_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974,range[2]-0.05*scal,"c",cex=2.2)
+
+ypo=-78
+xfl=48
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="white",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="dodgerblue3",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="dodgerblue3",border=NA)
+
+
+### small_intestine females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_fin_small_intestine_fem_1y,0)
+xx=xx+1
+tabce3(cis3_fin_small_intestine_fem_cond,0)
+xx=xx+1
+tabce3(cis3_fin_small_intestine_fem_5y,0)
+xx=1
+polygon(x,cis2_small_intestine_fin_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_fin_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_fin_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Finland.Females",]$surv_1y~small_intestine[small_intestine$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Finland.Females",]$surv_cond~small_intestine[small_intestine$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Finland.Females",]$surv_5y~small_intestine[small_intestine$group=="Finland.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_fin_small_intestine_fem_1y,post_small_intestine_fin_fem_1y);xx=xx+1
+tabce2(cis_fin_small_intestine_fem_cond,post_small_intestine_fin_fem_cond);xx=xx+1
+tabce2(cis_fin_small_intestine_fem_5y,post_small_intestine_fin_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974,range[2]-0.05*scal,"f",cex=2.2)
+```
+
+
+### Fig. 3 - Norway
+```{r,fig.height=6.9,fig.width=8,error=TRUE,warning=FALSE,results=FALSE,message=FALSE}
+## NOR figures -----------------
+m <- matrix(c(1,2,3
+              ,4,6,8
+              ,5,7,9), nrow = 3, ncol =3 ,byrow = TRUE)
+layout(mat = m,heights = c(0.06,1-0.06))
+par(mgp=c(1.6,0.8,0))
+par(mar=c(0,0,0,0))
+range<-c(0,100);scal<-range[2]-range[1]
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Colon cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Rectal cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Small intestine cancer",cex=1.6,font=3,xpd=TRUE)
+
+
+par(mgp=c(1.6,0.8,0))
+par(mar=c(2,2.5,0,2))
+
+### colon males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_nor_colon_mal_1y,0)
+xx=xx+1
+tabce3(cis3_nor_colon_mal_cond,0)
+xx=xx+1
+tabce3(cis3_nor_colon_mal_5y,0)
+
+xx=1
+polygon(x,cis2_colon_nor_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_nor_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_nor_mal_5y,border=NA,col=colb[xx],xpd=TRUE)
+
+xx=1
+points(colon[colon$group=="Norway.Males",]$surv_1y~colon[colon$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Norway.Males",]$surv_cond~colon[colon$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Norway.Males",]$surv_5y~colon[colon$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_nor_colon_mal_1y,post_colon_nor_mal_1y);xx=xx+1
+tabce2(cis_nor_colon_mal_cond,post_colon_nor_mal_cond);xx=xx+1
+tabce2(cis_nor_colon_mal_5y,post_colon_nor_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.37
+xpo=-1
+rect(1996+xpo,yy+0.035*scal,2017.9+xpo,yy-0.15*scal,col="white",border="grey50",lwd=0.8)
+repeat{
+  points(2000+xpo,yy,pch=17,col=cola[xx],cex=1.2)
+  lines(c(1997+xpo,2003+xpo),c(yy,yy),lwd=1.6,col=cola[xx],lend=1)
+  xx<-xx+1;yy=yy-(scal*0.058);if(xx>3){break}}
+xx=1;yy=range[1]+scal*0.37
+text(2010+xpo,yy,"1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5/1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(1974,range[2]-0.05*scal,"a",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_nor_colon_mal_1y[1,],rev(cis_nor_colon_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_nor_colon_mal_cond[1,],rev(cis_nor_colon_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_nor_colon_mal_5y[1,],rev(cis_nor_colon_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_nor_colon_mal_1y*20,cis_nor_colon_mal_1y*20)
+xx=xx+1
+tabce4(cis3_nor_colon_mal_cond*20,cis_nor_colon_mal_cond*20)
+xx=xx+1
+tabce4(cis3_nor_colon_mal_5y*20,cis_nor_colon_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+### colon females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_nor_colon_fem_1y,0)
+xx=xx+1
+tabce3(cis3_nor_colon_fem_cond,0)
+xx=xx+1
+tabce3(cis3_nor_colon_fem_5y,0)
+
+xx=1
+polygon(x,cis2_colon_nor_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_nor_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_nor_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(colon[colon$group=="Norway.Females",]$surv_1y~colon[colon$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Norway.Females",]$surv_cond~colon[colon$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Norway.Females",]$surv_5y~colon[colon$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_nor_colon_fem_1y,post_colon_nor_fem_1y);xx=xx+1
+tabce2(cis_nor_colon_fem_cond,post_colon_nor_fem_cond);xx=xx+1
+tabce2(cis_nor_colon_fem_5y,post_colon_nor_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.91
+xpo=-17
+text(1974,range[2]-0.05*scal,"d",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_nor_colon_fem_1y[1,],rev(cis_nor_colon_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_nor_colon_fem_cond[1,],rev(cis_nor_colon_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_nor_colon_fem_5y[1,],rev(cis_nor_colon_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_nor_colon_fem_1y*20,cis_nor_colon_fem_1y*20)
+xx=xx+1
+tabce4(cis3_nor_colon_fem_cond*20,cis_nor_colon_fem_cond*20)
+xx=xx+1
+tabce4(cis3_nor_colon_fem_5y*20,cis_nor_colon_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+### rectum males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+
+
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_nor_rectum_mal_1y,0)
+xx=xx+1
+tabce3(cis3_nor_rectum_mal_cond,0)
+xx=xx+1
+tabce3(cis3_nor_rectum_mal_5y,0)
+
+xx=1
+polygon(x,cis2_rectum_nor_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_nor_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_nor_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Norway.Males",]$surv_1y~rectum[rectum$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Norway.Males",]$surv_cond~rectum[rectum$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Norway.Males",]$surv_5y~rectum[rectum$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_nor_rectum_mal_1y,post_rectum_nor_mal_1y);xx=xx+1
+tabce2(cis_nor_rectum_mal_cond,post_rectum_nor_mal_cond);xx=xx+1
+tabce2(cis_nor_rectum_mal_5y,post_rectum_nor_mal_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"b",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_nor_rectum_mal_1y[1,],rev(cis_nor_rectum_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_nor_rectum_mal_cond[1,],rev(cis_nor_rectum_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_nor_rectum_mal_5y[1,],rev(cis_nor_rectum_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_nor_rectum_mal_1y*20,cis_nor_rectum_mal_1y*20)
+xx=xx+1
+tabce4(cis3_nor_rectum_mal_cond*20,cis_nor_rectum_mal_cond*20)
+xx=xx+1
+tabce4(cis3_nor_rectum_mal_5y*20,cis_nor_rectum_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+
+### rectum females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_nor_rectum_fem_1y,0)
+xx=xx+1
+tabce3(cis3_nor_rectum_fem_cond,0)
+xx=xx+1
+tabce3(cis3_nor_rectum_fem_5y,0)
+
+
+xx=1
+polygon(x,cis2_rectum_nor_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_nor_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_nor_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Norway.Females",]$surv_1y~rectum[rectum$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Norway.Females",]$surv_cond~rectum[rectum$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Norway.Females",]$surv_5y~rectum[rectum$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_nor_rectum_fem_1y,post_rectum_nor_fem_1y);xx=xx+1
+tabce2(cis_nor_rectum_fem_cond,post_rectum_nor_fem_cond);xx=xx+1
+tabce2(cis_nor_rectum_fem_5y,post_rectum_nor_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"e",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_nor_rectum_fem_1y[1,],rev(cis_nor_rectum_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_nor_rectum_fem_cond[1,],rev(cis_nor_rectum_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_nor_rectum_fem_5y[1,],rev(cis_nor_rectum_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_nor_rectum_fem_1y*20,cis_nor_rectum_fem_1y*20)
+xx=xx+1
+tabce4(cis3_nor_rectum_fem_cond*20,cis_nor_rectum_fem_cond*20)
+xx=xx+1
+tabce4(cis3_nor_rectum_fem_5y*20,cis_nor_rectum_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+### small_intestine males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_nor_small_intestine_mal_1y,0)
+xx=xx+1
+tabce3(cis3_nor_small_intestine_mal_cond,0)
+xx=xx+1
+tabce3(cis3_nor_small_intestine_mal_5y,0)
+
+xx=1
+polygon(x,cis2_small_intestine_nor_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_nor_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_nor_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Norway.Males",]$surv_1y~small_intestine[small_intestine$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Norway.Males",]$surv_cond~small_intestine[small_intestine$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Norway.Males",]$surv_5y~small_intestine[small_intestine$group=="Norway.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_nor_small_intestine_mal_1y,post_small_intestine_nor_mal_1y);xx=xx+1
+tabce2(cis_nor_small_intestine_mal_cond,post_small_intestine_nor_mal_cond);xx=xx+1
+tabce2(cis_nor_small_intestine_mal_5y,post_small_intestine_nor_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974,range[2]-0.05*scal,"c",cex=2.2)
+
+ypo=-78
+xfl=48
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="red2",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9285+ypo,1968+xfl,range[1]+scal*0.8735+ypo,col="white",border=NA)
+rect(1959+xfl,range[1]+scal*0.965+ypo,1963+xfl,range[1]+scal*0.84+ypo,col="white",border=NA)
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="darkblue",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="darkblue",border=NA)
+
+### small_intestine females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_nor_small_intestine_fem_1y,0)
+xx=xx+1
+tabce3(cis3_nor_small_intestine_fem_cond,0)
+xx=xx+1
+tabce3(cis3_nor_small_intestine_fem_5y,0)
+
+xx=1
+polygon(x,cis2_small_intestine_nor_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_nor_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_nor_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Norway.Females",]$surv_1y~small_intestine[small_intestine$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Norway.Females",]$surv_cond~small_intestine[small_intestine$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Norway.Females",]$surv_5y~small_intestine[small_intestine$group=="Norway.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_nor_small_intestine_fem_1y,post_small_intestine_nor_fem_1y);xx=xx+1
+tabce2(cis_nor_small_intestine_fem_cond,post_small_intestine_nor_fem_cond);xx=xx+1
+tabce2(cis_nor_small_intestine_fem_5y,post_small_intestine_nor_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974,range[2]-0.05*scal,"f",cex=2.2)
+```
+
+### Fig. 4 - Sweden
+```{r,fig.height=6.9,fig.width=8,error=TRUE,warning=FALSE,results=FALSE,message=FALSE}
+## SWE figures -----------------
+m <- matrix(c(1,2,3
+              ,4,6,8
+              ,5,7,9), nrow = 3, ncol =3 ,byrow = TRUE)
+layout(mat = m,heights = c(0.06,1-0.06))
+par(mgp=c(1.6,0.8,0))
+par(mar=c(0,0,0,0))
+range<-c(0,100);scal<-range[2]-range[1]
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Colon cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Rectal cancer",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Small intestine cancer",cex=1.6,font=3,xpd=TRUE)
+
+
+par(mgp=c(1.6,0.8,0))
+par(mar=c(2,2.5,0,2))
+
+### colon males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_swe_colon_mal_1y,-0.6)
+xx=xx+1
+tabce3(cis3_swe_colon_mal_cond,0)
+xx=xx+1
+tabce3(cis3_swe_colon_mal_5y,0.6)
+
+xx=1
+polygon(x,cis2_colon_swe_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_swe_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_swe_mal_5y,border=NA,col=colb[xx],xpd=TRUE)
+
+xx=1
+points(colon[colon$group=="Sweden.Males",]$surv_1y~colon[colon$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Sweden.Males",]$surv_cond~colon[colon$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Sweden.Males",]$surv_5y~colon[colon$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_swe_colon_mal_1y,post_colon_swe_mal_1y);xx=xx+1
+tabce2(cis_swe_colon_mal_cond,post_colon_swe_mal_cond);xx=xx+1
+tabce2(cis_swe_colon_mal_5y,post_colon_swe_mal_5y);xx=1
+
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.37
+xpo=-1
+rect(1996+xpo,yy+0.035*scal,2017.9+xpo,yy-0.15*scal,col="white",border="grey50",lwd=0.8)
+repeat{
+  points(2000+xpo,yy,pch=17,col=cola[xx],cex=1.2)
+  lines(c(1997+xpo,2003+xpo),c(yy,yy),lwd=1.6,col=cola[xx],lend=1)
+  xx<-xx+1;yy=yy-(scal*0.058);if(xx>3){break}}
+xx=1;yy=range[1]+scal*0.37
+text(2010+xpo,yy,"1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5/1-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(2010+xpo,yy,"5-year",col=cola[xx],cex=1.25);xx=xx+1;yy=yy-(scal*0.058)
+text(1974,range[2]-0.05*scal,"a",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_swe_colon_mal_1y[1,],rev(cis_swe_colon_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_swe_colon_mal_cond[1,],rev(cis_swe_colon_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_swe_colon_mal_5y[1,],rev(cis_swe_colon_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_swe_colon_mal_1y*20,cis_swe_colon_mal_1y*20)
+xx=xx+1
+tabce4(cis3_swe_colon_mal_cond*20,cis_swe_colon_mal_cond*20)
+xx=xx+1
+tabce4(cis3_swe_colon_mal_5y*20,cis_swe_colon_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### colon females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_swe_colon_fem_1y,-0.6)
+xx=xx+1
+tabce3(cis3_swe_colon_fem_cond,0)
+xx=xx+1
+tabce3(cis3_swe_colon_fem_5y,0.6)
+
+xx=1
+polygon(x,cis2_colon_swe_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_swe_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_colon_swe_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(colon[colon$group=="Sweden.Females",]$surv_1y~colon[colon$group=="Sweden.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Sweden.Females",]$surv_cond~colon[colon$group=="Sweden.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(colon[colon$group=="Sweden.Females",]$surv_5y~colon[colon$group=="Sweden.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_swe_colon_fem_1y,post_colon_swe_fem_1y);xx=xx+1
+tabce2(cis_swe_colon_fem_cond,post_colon_swe_fem_cond);xx=xx+1
+tabce2(cis_swe_colon_fem_5y,post_colon_swe_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+
+xx=1;yy=range[1]+scal*0.91
+xpo=-17
+text(1974,range[2]-0.05*scal,"d",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_swe_colon_fem_1y[1,],rev(cis_swe_colon_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_swe_colon_fem_cond[1,],rev(cis_swe_colon_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_swe_colon_fem_5y[1,],rev(cis_swe_colon_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_swe_colon_fem_1y*20,cis_swe_colon_fem_1y*20)
+xx=xx+1
+tabce4(cis3_swe_colon_fem_cond*20,cis_swe_colon_fem_cond*20)
+xx=xx+1
+tabce4(cis3_swe_colon_fem_5y*20,cis_swe_colon_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+
+### rectum males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+
+
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_swe_rectum_mal_1y,0)
+xx=xx+1
+tabce3(cis3_swe_rectum_mal_cond,0)
+xx=xx+1
+tabce3(cis3_swe_rectum_mal_5y,0)
+
+xx=1
+polygon(x,cis2_rectum_swe_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_swe_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_swe_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Sweden.Males",]$surv_1y~rectum[rectum$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Sweden.Males",]$surv_cond~rectum[rectum$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Sweden.Males",]$surv_5y~rectum[rectum$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_swe_rectum_mal_1y,post_rectum_swe_mal_1y);xx=xx+1
+tabce2(cis_swe_rectum_mal_cond,post_rectum_swe_mal_cond);xx=xx+1
+tabce2(cis_swe_rectum_mal_5y,post_rectum_swe_mal_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"b",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_swe_rectum_mal_1y[1,],rev(cis_swe_rectum_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_swe_rectum_mal_cond[1,],rev(cis_swe_rectum_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_swe_rectum_mal_5y[1,],rev(cis_swe_rectum_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_swe_rectum_mal_1y*20,cis_swe_rectum_mal_1y*20)
+xx=xx+1
+tabce4(cis3_swe_rectum_mal_cond*20,cis_swe_rectum_mal_cond*20)
+xx=xx+1
+tabce4(cis3_swe_rectum_mal_5y*20,cis_swe_rectum_mal_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+
+
+### rectum females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+xx=1
+tabce3(cis3_swe_rectum_fem_1y,-0.6)
+xx=xx+1
+tabce3(cis3_swe_rectum_fem_cond,0)
+xx=xx+1
+tabce3(cis3_swe_rectum_fem_5y,0.6)
+
+xx=1
+polygon(x,cis2_rectum_swe_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_swe_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_rectum_swe_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(rectum[rectum$group=="Sweden.Females",]$surv_1y~rectum[rectum$group=="Sweden.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Sweden.Females",]$surv_cond~rectum[rectum$group=="Sweden.Females",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(rectum[rectum$group=="Sweden.Females",]$surv_5y~rectum[rectum$group=="Sweden.Females",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_swe_rectum_fem_1y,post_rectum_swe_fem_1y);xx=xx+1
+tabce2(cis_swe_rectum_fem_cond,post_rectum_swe_fem_cond);xx=xx+1
+tabce2(cis_swe_rectum_fem_5y,post_rectum_swe_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+text(1974,range[2]-0.05*scal,"e",cex=2.2)
+
+# slope
+x<-c(yreal[1:499],yreal[499:1])
+cis2<-c(cis_swe_rectum_fem_1y[1,],rev(cis_swe_rectum_fem_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_swe_rectum_fem_cond[1,],rev(cis_swe_rectum_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+
+cis2<-c(cis_swe_rectum_fem_5y[1,],rev(cis_swe_rectum_fem_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+cis2<-cis2*20
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F)
+
+xx=1
+tabce4(cis3_swe_rectum_fem_1y*20,cis_swe_rectum_fem_1y*20)
+xx=xx+1
+tabce4(cis3_swe_rectum_fem_cond*20,cis_swe_rectum_fem_cond*20)
+xx=xx+1
+tabce4(cis3_swe_rectum_fem_5y*20,cis_swe_rectum_fem_5y*20)
+
+axis(4,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]/20),pos=2020)
+text(2024.5,50,"Change in survival over a year",cex=1.3,srt=270,xpd=TRUE)
+
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+
+### small_intestine males % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_swe_small_intestine_mal_1y,-0)
+xx=xx+1
+tabce3(cis3_swe_small_intestine_mal_cond,0)
+xx=xx+1
+tabce3(cis3_swe_small_intestine_mal_5y,0)
+
+xx=1
+polygon(x,cis2_small_intestine_swe_mal_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_swe_mal_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_swe_mal_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Sweden.Males",]$surv_1y~small_intestine[small_intestine$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Sweden.Males",]$surv_cond~small_intestine[small_intestine$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Sweden.Males",]$surv_5y~small_intestine[small_intestine$group=="Sweden.Males",]$year
+       ,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_swe_small_intestine_mal_1y,post_small_intestine_swe_mal_1y);xx=xx+1
+tabce2(cis_swe_small_intestine_mal_cond,post_small_intestine_swe_mal_cond);xx=xx+1
+tabce2(cis_swe_small_intestine_mal_5y,post_small_intestine_swe_mal_5y);xx=1
+
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Male relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974,range[2]-0.05*scal,"c",cex=2.2)
+
+ypo=-78
+xfl=48
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="blue",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="yellow",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="yellow",border=NA)
+
+
+### small_intestine females % ------------------------------------------------------
+
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-10
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+10;if(x>100){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+
+x<-c(yreal[1:500],yreal[500:1])
+
+xx=1
+tabce3(cis3_swe_small_intestine_fem_1y,-0.6)
+xx=xx+1
+tabce3(cis3_swe_small_intestine_fem_cond,0)
+xx=xx+1
+tabce3(cis3_swe_small_intestine_fem_5y,0.6)
+
+xx=1
+polygon(x,cis2_small_intestine_swe_fem_1y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_swe_fem_cond,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+polygon(x,cis2_small_intestine_swe_fem_5y,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+xx=1
+points(small_intestine[small_intestine$group=="Sweden.Females",]$surv_1y~small_intestine[small_intestine$group=="Sweden.Females",]$year,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Sweden.Females",]$surv_cond~small_intestine[small_intestine$group=="Sweden.Females",]$year ,pch=17,col=colc[xx],cex=1);xx=xx+1
+points(small_intestine[small_intestine$group=="Sweden.Females",]$surv_5y~small_intestine[small_intestine$group=="Sweden.Females",]$year,pch=17,col=colc[xx],cex=1)
+xx=1
+tabce2(cis_swe_small_intestine_fem_1y,post_small_intestine_swe_fem_1y);xx=xx+1
+tabce2(cis_swe_small_intestine_fem_cond,post_small_intestine_swe_fem_cond);xx=xx+1
+tabce2(cis_swe_small_intestine_fem_5y,post_small_intestine_swe_fem_5y);xx=1
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=10),labels=c(range[1],rep("",length(seq(range[1],range[2],by=10))-2),range[2]),pos=1971)
+title(ylab="Female relative survival (%)", line=0.5, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1])
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974,range[2]-0.05*scal,"f",cex=2.2)
+```
+
+
+### Suppl. Fig. 3 - Small intestine - change in trend
+```{r,fig.height=6.9,fig.width=8,error=TRUE,warning=FALSE,results=FALSE,message=FALSE}
+#  Small intestine change in survival ----------------
+
+m <- matrix(c(1,2, 3, 4
+              ,5,7, 9,11
+              ,6,8,10,12), nrow = 3, ncol = 4 ,byrow = TRUE)
+layout(mat = m,heights = c(0.04,0.48,0.48))
+par(mgp=c(1.6,0.8,0))
+par(mar=c(0,0,0,0))
+range<-c(-2,3);scal<-range[2]-range[1]
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Denmark",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Finland",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Norway",cex=1.6,font=3,xpd=TRUE)
+
+plot(NULL, axes=FALSE,xlab="",ylab="",xlim=c(-1,1),ylim=c(-0.85,0.85))
+text(0,-0.2,"Sweden",cex=1.6,font=3,xpd=TRUE)
+
+
+par(mgp=c(1.6,0.8,0))
+par(mar=c(2,1.5,0,0.5))
+
+### DEN males % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_den_small_intestine_mal_1y[1,],rev(cis_den_small_intestine_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_den_small_intestine_mal_cond[1,],rev(cis_den_small_intestine_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_den_small_intestine_mal_5y[1,],rev(cis_den_small_intestine_mal_5y[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=1
+
+xx=1
+tabce4(cis3_den_small_intestine_mal_1y,cis_den_small_intestine_mal_1y)
+xx=xx+1
+tabce4(cis3_den_small_intestine_mal_cond,cis_den_small_intestine_mal_cond)
+xx=xx+1
+tabce4(cis3_den_small_intestine_mal_5y,cis_den_small_intestine_mal_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+title(ylab="Change in male survival (%)", line=0.3, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+xx=1;yy=range[1]+scal*0.2
+rect(1996,yy+0.035*scal,2019,yy-0.15*scal,col="white",border="grey50",lwd=0.8)
+repeat{
+  points(2000,yy,pch=17,col=cola[xx],cex=1.5)
+  lines(c(1997,2003),c(yy,yy),lwd=1.6,col=cola[xx],lend=1)
+  xx<-xx+1;yy=yy-(scal*0.058);if(xx>3){break}}
+xx=1;yy=range[1]+scal*0.2
+text(2011,yy,"1-year",col=cola[xx],cex=1.15);xx=xx+1;yy=yy-(scal*0.058)
+text(2011,yy,"5/1-year",col=cola[xx],cex=1.15);xx=xx+1;yy=yy-(scal*0.058)
+text(2011,yy,"5-year",col=cola[xx],cex=1.15);xx=xx+1;yy=yy-(scal*0.058)
+
+text(1974.5,range[2]-0.05*scal,"a",cex=1.9)
+
+ypo=0
+xfl=30
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="red2",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="white",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="white",border=NA)
+
+
+### DEN females % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_den_small_intestine_fem_1y[1,],rev(cis_den_small_intestine_fem_1y[2,]));xx=1
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_den_small_intestine_fem_cond[1,],rev(cis_den_small_intestine_fem_cond[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_den_small_intestine_fem_5y[1,],rev(cis_den_small_intestine_fem_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=1
+
+xx=1
+tabce4(cis3_den_small_intestine_fem_1y,cis_den_small_intestine_fem_1y)
+xx=xx+1
+tabce4(cis3_den_small_intestine_fem_cond,cis_den_small_intestine_fem_cond)
+xx=xx+1
+tabce4(cis3_den_small_intestine_fem_5y,cis_den_small_intestine_fem_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+title(ylab="Change in female survival (%)", line=0.3, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974.5,range[2]-0.05*scal,"e",cex=1.9)
+
+### FIN males % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_fin_small_intestine_mal_1y[1,],rev(cis_fin_small_intestine_mal_1y[2,]));xx=1
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_fin_small_intestine_mal_cond[1,],rev(cis_fin_small_intestine_mal_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_fin_small_intestine_mal_5y[1,],rev(cis_fin_small_intestine_mal_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=1
+
+xx=1
+tabce4(cis3_fin_small_intestine_mal_1y,cis_fin_small_intestine_mal_1y)
+xx=xx+1
+tabce4(cis3_fin_small_intestine_mal_cond,cis_fin_small_intestine_mal_cond)
+xx=xx+1
+tabce4(cis3_fin_small_intestine_mal_5y,cis_fin_small_intestine_mal_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+#title(ylab="Change in male survival (%)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974.5,range[2]-0.05*scal,"b",cex=1.9)
+
+ypo=0
+xfl=30
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="white",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="dodgerblue3",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="dodgerblue3",border=NA)
+
+
+### FIN females % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_fin_small_intestine_fem_1y[1,],rev(cis_fin_small_intestine_fem_1y[2,]));xx=1
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_fin_small_intestine_fem_cond[1,],rev(cis_fin_small_intestine_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_fin_small_intestine_fem_5y[1,],rev(cis_fin_small_intestine_fem_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=1
+
+xx=1
+tabce4(cis3_fin_small_intestine_fem_1y,cis_fin_small_intestine_fem_1y)
+xx=xx+1
+tabce4(cis3_fin_small_intestine_fem_cond,cis_fin_small_intestine_fem_cond)
+xx=xx+1
+tabce4(cis3_fin_small_intestine_fem_5y,cis_fin_small_intestine_fem_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+#title(ylab="Change in female survival (%)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974.5,range[2]-0.05*scal,"f",cex=1.9)
+
+
+### NOR males % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_nor_small_intestine_mal_1y[1,],rev(cis_nor_small_intestine_mal_1y[2,]));xx=1
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_nor_small_intestine_mal_cond[1,],rev(cis_nor_small_intestine_mal_cond[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_nor_small_intestine_mal_5y[1,],rev(cis_nor_small_intestine_mal_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=1
+
+xx=1
+tabce4(cis3_nor_small_intestine_mal_1y,cis_nor_small_intestine_mal_1y)
+xx=xx+1
+tabce4(cis3_nor_small_intestine_mal_cond,cis_nor_small_intestine_mal_cond)
+xx=xx+1
+tabce4(cis3_nor_small_intestine_mal_5y,cis_nor_small_intestine_mal_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+#title(ylab="Change in male survival (%)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974.5,range[2]-0.05*scal,"c",cex=1.9)
+
+ypo=0
+xfl=30
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="red2",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9285+ypo,1968+xfl,range[1]+scal*0.8735+ypo,col="white",border=NA)
+rect(1959+xfl,range[1]+scal*0.965+ypo,1963+xfl,range[1]+scal*0.84+ypo,col="white",border=NA)
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="darkblue",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="darkblue",border=NA)
+
+### NOR females % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_nor_small_intestine_fem_1y[1,],rev(cis_nor_small_intestine_fem_1y[2,]));xx=1
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_nor_small_intestine_fem_cond[1,],rev(cis_nor_small_intestine_fem_cond[2,]))
+cis2[cis2<range[1]]<-range[1]
+cis2[cis2>range[2]]<-range[2]
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_nor_small_intestine_fem_5y[1,],rev(cis_nor_small_intestine_fem_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=1
+
+xx=1
+tabce4(cis3_nor_small_intestine_fem_1y,cis_nor_small_intestine_fem_1y)
+xx=xx+1
+tabce4(cis3_nor_small_intestine_fem_cond,cis_nor_small_intestine_fem_cond)
+xx=xx+1
+tabce4(cis3_nor_small_intestine_fem_5y,cis_nor_small_intestine_fem_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+#title(ylab="Change in female survival (%)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974.5,range[2]-0.05*scal,"g",cex=1.9)
+
+
+### SWE males % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_swe_small_intestine_mal_1y[1,],rev(cis_swe_small_intestine_mal_1y[2,]));xx=1
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_swe_small_intestine_mal_cond[1,],rev(cis_swe_small_intestine_mal_cond[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=xx+1
+
+cis2<-c(cis_swe_small_intestine_mal_5y[1,],rev(cis_swe_small_intestine_mal_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=F);xx=1
+
+xx=1
+tabce4(cis3_swe_small_intestine_mal_1y,cis_swe_small_intestine_mal_1y)
+xx=xx+1
+tabce4(cis3_swe_small_intestine_mal_cond,cis_swe_small_intestine_mal_cond)
+xx=xx+1
+tabce4(cis3_swe_small_intestine_mal_5y,cis_swe_small_intestine_mal_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+#title(ylab="Change in male survival (%)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+
+text(1974.5,range[2]-0.05*scal,"d",cex=1.9)
+
+ypo=0
+xfl=30
+rect(1956+xfl,range[1]+scal*0.965+ypo,1968+xfl,range[1]+scal*0.84+ypo,col="blue",border="grey50")
+rect(1956+xfl,range[1]+scal*0.9135+ypo,1968+xfl,range[1]+scal*0.8865+ypo,col="yellow",border=NA)
+rect(1960+xfl,range[1]+scal*0.965+ypo,1962+xfl,range[1]+scal*0.84+ypo,col="yellow",border=NA)
+
+### SWE females % ------------------------------------------------------
+plot(NULL,xlim=c(1971,2020),ylim=c(range[1],range[2]),xlab="",ylab=""
+     ,las=1, axes=FALSE)
+rect(1971,range[2],2020,range[1],col="grey90",border=NA)
+x<-range[1]
+repeat{
+  lines(c(1971,2020),c(x,x),col="white")
+  x=x+1;if(x>range[2]){break}}
+
+x<-1980
+repeat{
+  lines(c(x,x),c(range[1],range[2]),col="white")
+  x=x+10;if(x>2020){break}}
+lines(yreal[1:499],rep(0,499),lwd=1,col="black",lty=1,lend=1)
+
+x<-c(yreal[1:499],yreal[499:1])
+
+cis2<-c(cis_swe_small_intestine_fem_1y[1,],rev(cis_swe_small_intestine_fem_1y[2,]));xx=1
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_swe_small_intestine_fem_cond[1,],rev(cis_swe_small_intestine_fem_cond[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=xx+1
+
+cis2<-c(cis_swe_small_intestine_fem_5y[1,],rev(cis_swe_small_intestine_fem_5y[2,]))
+polygon(x,cis2,border=NA,col=colb[xx],xpd=TRUE);xx=1
+
+xx=1
+tabce4(cis3_swe_small_intestine_fem_1y,cis_swe_small_intestine_fem_1y)
+xx=xx+1
+tabce4(cis3_swe_small_intestine_fem_cond,cis_swe_small_intestine_fem_cond)
+xx=xx+1
+tabce4(cis3_swe_small_intestine_fem_5y,cis_swe_small_intestine_fem_5y)
+
+axis(2,las=2,cex.axis=1.4,at=seq(range[1],range[2],by=1),labels=c(range[1],rep("",length(seq(range[1],range[2],by=1))-2),range[2]),pos=1971)
+#title(ylab="Change in female survival (%)", line=1, cex.lab=1.4)
+axis(side=1,las=1,cex.axis=1.4,at=c(seq(1980,2020,by=10)),pos=range[1],labels=c(rep("",5)));text(c(seq(1978,2020,by=20)),c(rep(range[1]-0.05*scal,3)),c(seq(1980,2020,by=20)),xpd=TRUE,cex=1.4);
+lines(c(1971,2020),c(range[1],range[1]))
+title(xlab="Year", line=1, cex.lab=1.4,xpd=TRUE)
+text(1974.5,range[2]-0.05*scal,"h",cex=1.9)
+```
+
+
